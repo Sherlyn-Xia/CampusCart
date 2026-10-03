@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-HK">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#173f2b" />
+    <title>CampusCart · Sandbox payment authentication</title>
+    <link rel="stylesheet" href="/agent-styles.css" />
+  </head>
+  <body class="payment-auth-page">
+    <main class="payment-auth-card">
+      <span class="sandbox-badge"><span class="pulse"></span> Mock payment adapter</span>
+      <div class="payment-auth-icon">↗</div>
+      <span class="eyebrow">External user action · sandbox</span>
+      <h1>Authenticate this payment</h1>
+      <p>This page represents a provider redirect. No Tap & Go, bank, card network or wallet is connected, and no funds will move.</p>
+      <dl class="payment-auth-facts">
+        <div><dt>Payment session</dt><dd id="payment-session">Loading…</dd></div>
+        <div><dt>Agent run</dt><dd id="agent-run">Loading…</dd></div>
+        <div><dt>Security</dt><dd>One-time action ID</dd></div>
+      </dl>
+      <div id="payment-auth-result" class="data-note">Choose an outcome to resume the waiting LangGraph run.</div>
+      <div class="payment-auth-actions">
+        <button class="button button-accent" id="approve-payment">Simulate successful authentication</button>
+        <button class="button button-secondary" id="fail-payment">Simulate decline / cancel</button>
+      </div>
+      <a class="button button-link" id="return-link" href="/">Return to CampusCart</a>
+    </main>
+    <script type="module" src="/payment-auth.js"></script>
+  </body>
+</html>

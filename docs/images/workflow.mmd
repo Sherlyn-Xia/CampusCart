@@ -1,0 +1,21 @@
+%%{init: {"theme":"neutral","flowchart":{"curve":"basis","nodeSpacing":40,"rankSpacing":45}}}%%
+flowchart TD
+  U(["User: purchase intent<br/>(natural language)"]) --> API["Agent API"]
+  API --> D["<b>1. discovery</b><br/>LangChain agent, read-only tools only<br/>catalog · quotes · student status<br/>rule evaluation · payment methods"]
+  D -->|"eligible plans"| H1{{"<b>HUMAN ACTION 1</b><br/>purchase_authorization<br/>choose a plan + max cash amount"}}
+  D -->|"unsupported / unclear input<br/>no plan within budget or payment limits"| STOP1["NEEDS_CLARIFICATION or BLOCKED<br/>no authorization is requested"]
+  H1 -->|approve| P["<b>2. authorize_and_precheck</b><br/>Benefit Lock + deterministic PRECHECK"]
+  H1 -->|reject| C["cancel: close lock, no payment"]
+  P -->|"STOP"| STOP2["BLOCKED<br/>no payment session is created"]
+  P -->|"ALLOW"| PP["<b>3. prepare_payment</b><br/>create payment auth session"]
+  PP --> H2{{"<b>HUMAN ACTION 2</b><br/>payment_authentication<br/>bound to run + action + payment session"}}
+  H2 -->|"failed / cancelled"| C
+  H2 -->|authenticated| CP["<b>4. complete_payment</b><br/>re-check lock, record sandbox receipt"]
+  CP --> DONE(["COMPLETED (sandbox order)"])
+
+  classDef human fill:#fff3e0,stroke:#e65100,color:#000
+  classDef stop fill:#fdecee,stroke:#b72638,color:#000
+  classDef ok fill:#eaf4ef,stroke:#2e7d4f,color:#000
+  class H1,H2 human
+  class STOP1,STOP2,C stop
+  class DONE ok
