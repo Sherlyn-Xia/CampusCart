@@ -1,0 +1,1015 @@
+{
+  "generatedAt": "2026-10-02T21:07:54.528Z",
+  "dataClassification": "synthetic_sandbox_demo",
+  "run": {
+    "id": "2c23318e-c253-4029-8cd8-138704bdd0dc",
+    "threadId": "thread-2c23318e-c253-4029-8cd8-138704bdd0dc",
+    "status": "cancelled",
+    "agentMode": "langgraph_deterministic_fallback",
+    "framework": {
+      "agent": "LangChain",
+      "orchestration": "LangGraph"
+    },
+    "request": {
+      "message": "帮我买这台 iPad，预算 HK$3,600",
+      "context": {
+        "locale": "zh-HK",
+        "currency": "HKD",
+        "demoScenario": "success",
+        "selectedProduct": {
+          "sku": "EDU-IPAD-A16-128-SLV",
+          "source": "product_page",
+          "userConfirmed": true
+        }
+      }
+    },
+    "transactionSessionId": "22ccb4ce-40d5-4ae5-87c1-4337b4af32bb",
+    "proposal": {
+      "summary": "Recommended Campus Demo Store at HK$3399.00 after deterministic checks.",
+      "plan": {
+        "id": "plan-campus-delivery",
+        "pathId": "campus-delivery",
+        "merchantId": "campus-demo-store",
+        "merchant": "Campus Demo Store",
+        "channel": "Demo web checkout",
+        "sku": "EDU-IPAD-A16-128-SLV",
+        "fulfillment": "Standard delivery · Sandbox promise",
+        "paymentMethodId": "mock-tap-go",
+        "appliedOffers": [
+          {
+            "id": "EDU-200",
+            "version": "1.2",
+            "title": "Verified student price"
+          },
+          {
+            "id": "SHIP-0",
+            "version": "1.1",
+            "title": "Demo free standard delivery"
+          }
+        ],
+        "productCents": 359900,
+        "shippingCents": 0,
+        "discountCents": 20000,
+        "pointsUsed": 0,
+        "pointsValueCents": 0,
+        "rewardCents": 0,
+        "cashOutCents": 339900,
+        "referenceCostCents": 339900,
+        "eligible": true,
+        "reasons": [],
+        "equation": "HK$3,599 + HK$0 − HK$200 − HK$0 points = HK$3,399"
+      },
+      "alternativePlans": [
+        {
+          "id": "plan-harbour-points",
+          "pathId": "harbour-points",
+          "merchantId": "harbour-tech-sandbox",
+          "merchant": "Harbour Tech Sandbox",
+          "channel": "Demo student portal",
+          "sku": "EDU-IPAD-A16-128-SLV",
+          "fulfillment": "Campus pickup · 3–5 demo days",
+          "paymentMethodId": "mock-campus-wallet",
+          "appliedOffers": [
+            {
+              "id": "HT-STUDENT-100",
+              "version": "2.0",
+              "title": "Harbour student saving"
+            }
+          ],
+          "productCents": 354900,
+          "shippingCents": 3000,
+          "discountCents": 10000,
+          "pointsUsed": 100,
+          "pointsValueCents": 5000,
+          "rewardCents": 0,
+          "cashOutCents": 342900,
+          "referenceCostCents": 347900,
+          "eligible": true,
+          "reasons": [],
+          "equation": "HK$3,549 + HK$30 − HK$100 − HK$50 points = HK$3,429"
+        },
+        {
+          "id": "plan-unimall-reward",
+          "pathId": "unimall-reward",
+          "merchantId": "unimall-demo",
+          "merchant": "UniMall Demo",
+          "channel": "Demo web checkout",
+          "sku": "EDU-IPAD-A16-128-SLV",
+          "fulfillment": "Store pickup · 2–4 demo days",
+          "paymentMethodId": "mock-tap-go",
+          "appliedOffers": [
+            {
+              "id": "UM-VOUCHER-120",
+              "version": "1.0",
+              "title": "UniMall web voucher"
+            }
+          ],
+          "productCents": 359900,
+          "shippingCents": 0,
+          "discountCents": 12000,
+          "pointsUsed": 0,
+          "pointsValueCents": 0,
+          "rewardCents": 2000,
+          "cashOutCents": 347900,
+          "referenceCostCents": 345900,
+          "eligible": true,
+          "reasons": [],
+          "equation": "HK$3,599 + HK$0 − HK$120 − HK$0 points = HK$3,479"
+        }
+      ],
+      "merchantQuotes": [
+        {
+          "quoteId": "quote-campus-delivery",
+          "merchantId": "campus-demo-store",
+          "merchantName": "Campus Demo Store",
+          "sku": "EDU-IPAD-A16-128-SLV",
+          "currency": "HKD",
+          "productCents": 359900,
+          "shippingCents": 0,
+          "offerRefs": [
+            {
+              "id": "EDU-200",
+              "version": "1.2"
+            },
+            {
+              "id": "SHIP-0",
+              "version": "1.1"
+            }
+          ],
+          "paymentMethodId": "mock-tap-go",
+          "fulfillment": "Standard delivery · Sandbox promise",
+          "verificationStatus": "verified_demo",
+          "source": "sandbox",
+          "expiresAt": "2026-10-02T21:22:54.523Z"
+        },
+        {
+          "quoteId": "quote-harbour-points",
+          "merchantId": "harbour-tech-sandbox",
+          "merchantName": "Harbour Tech Sandbox",
+          "sku": "EDU-IPAD-A16-128-SLV",
+          "currency": "HKD",
+          "productCents": 354900,
+          "shippingCents": 3000,
+          "offerRefs": [
+            {
+              "id": "HT-STUDENT-100",
+              "version": "2.0"
+            }
+          ],
+          "paymentMethodId": "mock-campus-wallet",
+          "fulfillment": "Campus pickup · 3–5 demo days",
+          "verificationStatus": "verified_demo",
+          "source": "sandbox",
+          "expiresAt": "2026-10-02T21:22:54.523Z"
+        },
+        {
+          "quoteId": "quote-unimall-reward",
+          "merchantId": "unimall-demo",
+          "merchantName": "UniMall Demo",
+          "sku": "EDU-IPAD-A16-128-SLV",
+          "currency": "HKD",
+          "productCents": 359900,
+          "shippingCents": 0,
+          "offerRefs": [
+            {
+              "id": "UM-VOUCHER-120",
+              "version": "1.0"
+            }
+          ],
+          "paymentMethodId": "mock-tap-go",
+          "fulfillment": "Store pickup · 2–4 demo days",
+          "verificationStatus": "verified_demo",
+          "source": "sandbox",
+          "expiresAt": "2026-10-02T21:22:54.523Z"
+        }
+      ],
+      "identity": {
+        "providerId": "campuscart-sandbox-identity",
+        "studentStatus": "valid",
+        "credentialStatus": "active",
+        "requiresUserAction": false,
+        "dataMinimization": "No student number or document image is stored.",
+        "source": "sandbox"
+      },
+      "paymentMethods": [
+        {
+          "methodId": "mock-tap-go",
+          "displayName": "Tap & Go · Sandbox",
+          "methodType": "wallet",
+          "integrationStatus": "sandbox",
+          "actionType": "redirect",
+          "requiresUserAuthentication": true,
+          "supportedMerchantIds": [
+            "campus-demo-store",
+            "harbour-tech-sandbox",
+            "unimall-demo"
+          ],
+          "disclaimer": "Local sandbox adapter only; no financial network is connected."
+        },
+        {
+          "methodId": "mock-campus-wallet",
+          "displayName": "Campus Wallet · Sandbox",
+          "methodType": "wallet",
+          "integrationStatus": "sandbox",
+          "actionType": "redirect",
+          "requiresUserAuthentication": true,
+          "supportedMerchantIds": [
+            "campus-demo-store",
+            "harbour-tech-sandbox",
+            "unimall-demo"
+          ],
+          "disclaimer": "Local sandbox adapter only; no financial network is connected."
+        },
+        {
+          "methodId": "credit-card",
+          "displayName": "Credit card",
+          "methodType": "card",
+          "integrationStatus": "future_integration",
+          "actionType": "sdk_token",
+          "requiresUserAuthentication": true,
+          "supportedMerchantIds": [
+            "campus-demo-store",
+            "harbour-tech-sandbox",
+            "unimall-demo"
+          ],
+          "disclaimer": "Interface placeholder only; provider access and capabilities are not claimed."
+        },
+        {
+          "methodId": "wechat-pay",
+          "displayName": "WeChat Pay",
+          "methodType": "wallet",
+          "integrationStatus": "future_integration",
+          "actionType": "redirect",
+          "requiresUserAuthentication": true,
+          "supportedMerchantIds": [
+            "campus-demo-store",
+            "harbour-tech-sandbox",
+            "unimall-demo"
+          ],
+          "disclaimer": "Interface placeholder only; provider access and capabilities are not claimed."
+        },
+        {
+          "methodId": "alipay-hk",
+          "displayName": "AlipayHK / Alipay",
+          "methodType": "wallet",
+          "integrationStatus": "future_integration",
+          "actionType": "redirect",
+          "requiresUserAuthentication": true,
+          "supportedMerchantIds": [
+            "campus-demo-store",
+            "harbour-tech-sandbox",
+            "unimall-demo"
+          ],
+          "disclaimer": "Interface placeholder only; provider access and capabilities are not claimed."
+        },
+        {
+          "methodId": "octopus",
+          "displayName": "Octopus",
+          "methodType": "stored_value",
+          "integrationStatus": "future_integration",
+          "actionType": "app_deep_link",
+          "requiresUserAuthentication": true,
+          "supportedMerchantIds": [
+            "campus-demo-store",
+            "harbour-tech-sandbox",
+            "unimall-demo"
+          ],
+          "disclaimer": "Interface placeholder only; provider access and capabilities are not claimed."
+        }
+      ],
+      "intent": {
+        "rawText": "帮我买这台 iPad，预算 HK$3,600",
+        "product": {
+          "sku": "EDU-IPAD-A16-128-SLV",
+          "quantity": 1,
+          "userConfirmed": true,
+          "language": {
+            "accessory": false,
+            "negated": false,
+            "deictic": true,
+            "supportedProductMention": true,
+            "quantity": 1,
+            "ambiguousQuantity": false,
+            "ambiguousSpecification": false
+          }
+        },
+        "constraints": {
+          "budgetCents": 360000,
+          "allowedPaymentMethodIds": null,
+          "allowPoints": true,
+          "maxPoints": 100,
+          "fulfillmentDeadline": null
+        },
+        "preferences": {
+          "optimizeFor": "reference_cost",
+          "preferredPaymentMethodIds": []
+        },
+        "missingFields": [],
+        "evidence": {
+          "budget": {
+            "original": "预算 HK$3,600",
+            "parsedValue": 360000,
+            "normalized": "3600",
+            "status": "parsed"
+          }
+        }
+      },
+      "action": {
+        "actionId": "authorize_88169227-215",
+        "type": "purchase_authorization",
+        "message": "Approve this exact sandbox plan and its spending boundary?",
+        "planId": "plan-campus-delivery",
+        "maxPaymentCents": 360000,
+        "expiresAt": "2026-10-02T21:22:54.524Z"
+      }
+    },
+    "pendingAction": null,
+    "outcome": {
+      "type": "cancelled",
+      "reason": {
+        "code": "USER_REJECTED",
+        "message": "The user rejected the proposed purchase."
+      },
+      "paymentSubmitted": false,
+      "paymentCallCount": 0
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "帮我买这台 iPad，预算 HK$3,600",
+        "at": "2026-10-02T21:07:54.521Z"
+      }
+    ],
+    "createdAt": "2026-10-02T21:07:54.521Z",
+    "updatedAt": "2026-10-02T21:07:54.528Z",
+    "trace": [
+      {
+        "id": "aec92dfc-db1c-490e-a862-9dd5a992a00f",
+        "sequence": 1,
+        "type": "agent_run_created",
+        "at": "2026-10-02T21:07:54.521Z",
+        "data": {
+          "agentMode": "langgraph_deterministic_fallback",
+          "messageLength": 22
+        },
+        "previousHash": "GENESIS",
+        "hash": "4208215d49b19e3bfd3fb76c12498158998b54f30853a7d2189f35482c837b50"
+      },
+      {
+        "id": "3a9e2757-fe40-4dfa-95c5-f09c580fbbb6",
+        "sequence": 2,
+        "type": "agent_state_transition",
+        "at": "2026-10-02T21:07:54.522Z",
+        "data": {
+          "node": "discovery",
+          "status": "started"
+        },
+        "previousHash": "4208215d49b19e3bfd3fb76c12498158998b54f30853a7d2189f35482c837b50",
+        "hash": "55402edf2f7ee72dc0c513c690fa0143377bdd6f59d507d17cc298b81e535384"
+      },
+      {
+        "id": "630f3b0d-bc8a-49c4-9a40-2bf478330082",
+        "sequence": 3,
+        "type": "tool_call_started",
+        "at": "2026-10-02T21:07:54.522Z",
+        "data": {
+          "tool": "search_supported_products",
+          "input": {
+            "query": "帮我买这台 iPad，预算 HK$3,600"
+          }
+        },
+        "previousHash": "55402edf2f7ee72dc0c513c690fa0143377bdd6f59d507d17cc298b81e535384",
+        "hash": "5c68b5eaad9671d7b8caf0a044e1754f45f3cd61c9f0db719107bf546500b7e3"
+      },
+      {
+        "id": "aced4d4c-fa50-4857-9b11-8718c3812b71",
+        "sequence": 4,
+        "type": "tool_call_completed",
+        "at": "2026-10-02T21:07:54.523Z",
+        "data": {
+          "tool": "search_supported_products",
+          "resultSummary": {
+            "count": 1
+          }
+        },
+        "previousHash": "5c68b5eaad9671d7b8caf0a044e1754f45f3cd61c9f0db719107bf546500b7e3",
+        "hash": "9464b8283c6212a855ef9ea282045ba7ef1d74e465131748879f3e299b44c8b8"
+      },
+      {
+        "id": "893c7d95-e830-4d6e-935e-e509410f19d0",
+        "sequence": 5,
+        "type": "tool_call_started",
+        "at": "2026-10-02T21:07:54.523Z",
+        "data": {
+          "tool": "fetch_merchant_quotes",
+          "input": {
+            "sku": "EDU-IPAD-A16-128-SLV"
+          }
+        },
+        "previousHash": "9464b8283c6212a855ef9ea282045ba7ef1d74e465131748879f3e299b44c8b8",
+        "hash": "f5fa7bf8168c16a15814fd9c90c6d49440dbe9a7ed498c9be4461b16814eb1fd"
+      },
+      {
+        "id": "f0bb522d-be4d-49ab-9264-2a68f21614ae",
+        "sequence": 6,
+        "type": "tool_call_completed",
+        "at": "2026-10-02T21:07:54.523Z",
+        "data": {
+          "tool": "fetch_merchant_quotes",
+          "resultSummary": {
+            "count": 3
+          }
+        },
+        "previousHash": "f5fa7bf8168c16a15814fd9c90c6d49440dbe9a7ed498c9be4461b16814eb1fd",
+        "hash": "b57322667115f85345f3f6df0e2f532a944e49f11c08ad72c0cc4a65ae46d234"
+      },
+      {
+        "id": "e556a33b-a01f-4bd9-a479-444142c9cc22",
+        "sequence": 7,
+        "type": "tool_call_started",
+        "at": "2026-10-02T21:07:54.523Z",
+        "data": {
+          "tool": "inspect_student_eligibility",
+          "input": {}
+        },
+        "previousHash": "b57322667115f85345f3f6df0e2f532a944e49f11c08ad72c0cc4a65ae46d234",
+        "hash": "c384288db2ef2344f26f4f939c029ac0679b7c999736b924a11d5f0fd97ec51e"
+      },
+      {
+        "id": "b81b57f3-c16f-43c0-8735-85f13e57018d",
+        "sequence": 8,
+        "type": "tool_call_completed",
+        "at": "2026-10-02T21:07:54.523Z",
+        "data": {
+          "tool": "inspect_student_eligibility",
+          "resultSummary": {
+            "status": "ok"
+          }
+        },
+        "previousHash": "c384288db2ef2344f26f4f939c029ac0679b7c999736b924a11d5f0fd97ec51e",
+        "hash": "9e87e10ac6a0dd96b3f1f99bbd9d829272938f246a4b299d569e290f8be99095"
+      },
+      {
+        "id": "387f36ed-8734-4cf5-b03e-98e38853fbc3",
+        "sequence": 9,
+        "type": "tool_call_started",
+        "at": "2026-10-02T21:07:54.523Z",
+        "data": {
+          "tool": "evaluate_checkout_options",
+          "input": {
+            "budgetCents": 360000,
+            "allowPoints": true,
+            "maxPoints": 100,
+            "paymentMethodIds": [
+              "mock-tap-go",
+              "mock-campus-wallet"
+            ]
+          }
+        },
+        "previousHash": "9e87e10ac6a0dd96b3f1f99bbd9d829272938f246a4b299d569e290f8be99095",
+        "hash": "dd836caee668a836c6ccb30f3f915182c228989bcf482fa78a1c06fca980e367"
+      },
+      {
+        "id": "88bac8e8-1d74-4b18-9117-5474be85e907",
+        "sequence": 10,
+        "type": "tool_call_completed",
+        "at": "2026-10-02T21:07:54.524Z",
+        "data": {
+          "tool": "evaluate_checkout_options",
+          "resultSummary": {
+            "status": "ok"
+          }
+        },
+        "previousHash": "dd836caee668a836c6ccb30f3f915182c228989bcf482fa78a1c06fca980e367",
+        "hash": "fba7dfb3470a506d6c2f9b83e47f1ee487079e5c8eb3cf841edaa42b62a6df25"
+      },
+      {
+        "id": "179ee819-eba8-4905-820b-6824e3371089",
+        "sequence": 11,
+        "type": "tool_call_started",
+        "at": "2026-10-02T21:07:54.524Z",
+        "data": {
+          "tool": "list_payment_methods",
+          "input": {
+            "merchantId": "campus-demo-store",
+            "amountCents": 339900
+          }
+        },
+        "previousHash": "fba7dfb3470a506d6c2f9b83e47f1ee487079e5c8eb3cf841edaa42b62a6df25",
+        "hash": "9a53468312943a931ed7dc318debb1bac54452ec55cac4ef2a830fdc88a9970a"
+      },
+      {
+        "id": "b6ef24c5-0c25-4732-ad19-c69996a2285b",
+        "sequence": 12,
+        "type": "tool_call_completed",
+        "at": "2026-10-02T21:07:54.524Z",
+        "data": {
+          "tool": "list_payment_methods",
+          "resultSummary": {
+            "count": 6
+          }
+        },
+        "previousHash": "9a53468312943a931ed7dc318debb1bac54452ec55cac4ef2a830fdc88a9970a",
+        "hash": "327f301df4adba2f3228fbf98da6ed1eba6a35753e3eb60989a1a05398b1ca9a"
+      },
+      {
+        "id": "5de22c8c-ee7c-44b6-b8b0-a76eaa5e6ed2",
+        "sequence": 13,
+        "type": "agent_state_transition",
+        "at": "2026-10-02T21:07:54.524Z",
+        "data": {
+          "node": "discovery",
+          "status": "completed"
+        },
+        "previousHash": "327f301df4adba2f3228fbf98da6ed1eba6a35753e3eb60989a1a05398b1ca9a",
+        "hash": "371ba2c8161612a2bbe8980ea8c9b59d61b92ece041f65f465f17814cc728977"
+      },
+      {
+        "id": "284ab2d4-06ee-4160-b6ca-b2ba38eb02b9",
+        "sequence": 14,
+        "type": "human_action_requested",
+        "at": "2026-10-02T21:07:54.525Z",
+        "data": {
+          "type": "purchase_authorization",
+          "actionId": "authorize_88169227-215"
+        },
+        "previousHash": "371ba2c8161612a2bbe8980ea8c9b59d61b92ece041f65f465f17814cc728977",
+        "hash": "2a6fb322afbb66436d2f610957d324100e06d2e48345d109d7985f035ccf1204"
+      },
+      {
+        "id": "908aff1d-42b9-4e94-9273-a3c26a383a17",
+        "sequence": 15,
+        "type": "human_action_resumed",
+        "at": "2026-10-02T21:07:54.525Z",
+        "data": {
+          "actionId": "authorize_88169227-215",
+          "decision": "reject"
+        },
+        "previousHash": "2a6fb322afbb66436d2f610957d324100e06d2e48345d109d7985f035ccf1204",
+        "hash": "e4062da016ca55c035ae864257e11ccb7ab162a8a48dbd1b07a77279e34add60"
+      },
+      {
+        "id": "5974b50b-1f48-40db-b97c-61127105e840",
+        "sequence": 16,
+        "type": "agent_run_finished",
+        "at": "2026-10-02T21:07:54.528Z",
+        "data": {
+          "status": "cancelled",
+          "outcomeType": "cancelled"
+        },
+        "previousHash": "e4062da016ca55c035ae864257e11ccb7ab162a8a48dbd1b07a77279e34add60",
+        "hash": "06eb8f2203dcbf29518c0e3506bd606f38d2d20387815a463757e9775d3fecd3"
+      }
+    ]
+  },
+  "agentTrace": [
+    {
+      "id": "aec92dfc-db1c-490e-a862-9dd5a992a00f",
+      "sequence": 1,
+      "type": "agent_run_created",
+      "at": "2026-10-02T21:07:54.521Z",
+      "data": {
+        "agentMode": "langgraph_deterministic_fallback",
+        "messageLength": 22
+      },
+      "previousHash": "GENESIS",
+      "hash": "4208215d49b19e3bfd3fb76c12498158998b54f30853a7d2189f35482c837b50"
+    },
+    {
+      "id": "3a9e2757-fe40-4dfa-95c5-f09c580fbbb6",
+      "sequence": 2,
+      "type": "agent_state_transition",
+      "at": "2026-10-02T21:07:54.522Z",
+      "data": {
+        "node": "discovery",
+        "status": "started"
+      },
+      "previousHash": "4208215d49b19e3bfd3fb76c12498158998b54f30853a7d2189f35482c837b50",
+      "hash": "55402edf2f7ee72dc0c513c690fa0143377bdd6f59d507d17cc298b81e535384"
+    },
+    {
+      "id": "630f3b0d-bc8a-49c4-9a40-2bf478330082",
+      "sequence": 3,
+      "type": "tool_call_started",
+      "at": "2026-10-02T21:07:54.522Z",
+      "data": {
+        "tool": "search_supported_products",
+        "input": {
+          "query": "帮我买这台 iPad，预算 HK$3,600"
+        }
+      },
+      "previousHash": "55402edf2f7ee72dc0c513c690fa0143377bdd6f59d507d17cc298b81e535384",
+      "hash": "5c68b5eaad9671d7b8caf0a044e1754f45f3cd61c9f0db719107bf546500b7e3"
+    },
+    {
+      "id": "aced4d4c-fa50-4857-9b11-8718c3812b71",
+      "sequence": 4,
+      "type": "tool_call_completed",
+      "at": "2026-10-02T21:07:54.523Z",
+      "data": {
+        "tool": "search_supported_products",
+        "resultSummary": {
+          "count": 1
+        }
+      },
+      "previousHash": "5c68b5eaad9671d7b8caf0a044e1754f45f3cd61c9f0db719107bf546500b7e3",
+      "hash": "9464b8283c6212a855ef9ea282045ba7ef1d74e465131748879f3e299b44c8b8"
+    },
+    {
+      "id": "893c7d95-e830-4d6e-935e-e509410f19d0",
+      "sequence": 5,
+      "type": "tool_call_started",
+      "at": "2026-10-02T21:07:54.523Z",
+      "data": {
+        "tool": "fetch_merchant_quotes",
+        "input": {
+          "sku": "EDU-IPAD-A16-128-SLV"
+        }
+      },
+      "previousHash": "9464b8283c6212a855ef9ea282045ba7ef1d74e465131748879f3e299b44c8b8",
+      "hash": "f5fa7bf8168c16a15814fd9c90c6d49440dbe9a7ed498c9be4461b16814eb1fd"
+    },
+    {
+      "id": "f0bb522d-be4d-49ab-9264-2a68f21614ae",
+      "sequence": 6,
+      "type": "tool_call_completed",
+      "at": "2026-10-02T21:07:54.523Z",
+      "data": {
+        "tool": "fetch_merchant_quotes",
+        "resultSummary": {
+          "count": 3
+        }
+      },
+      "previousHash": "f5fa7bf8168c16a15814fd9c90c6d49440dbe9a7ed498c9be4461b16814eb1fd",
+      "hash": "b57322667115f85345f3f6df0e2f532a944e49f11c08ad72c0cc4a65ae46d234"
+    },
+    {
+      "id": "e556a33b-a01f-4bd9-a479-444142c9cc22",
+      "sequence": 7,
+      "type": "tool_call_started",
+      "at": "2026-10-02T21:07:54.523Z",
+      "data": {
+        "tool": "inspect_student_eligibility",
+        "input": {}
+      },
+      "previousHash": "b57322667115f85345f3f6df0e2f532a944e49f11c08ad72c0cc4a65ae46d234",
+      "hash": "c384288db2ef2344f26f4f939c029ac0679b7c999736b924a11d5f0fd97ec51e"
+    },
+    {
+      "id": "b81b57f3-c16f-43c0-8735-85f13e57018d",
+      "sequence": 8,
+      "type": "tool_call_completed",
+      "at": "2026-10-02T21:07:54.523Z",
+      "data": {
+        "tool": "inspect_student_eligibility",
+        "resultSummary": {
+          "status": "ok"
+        }
+      },
+      "previousHash": "c384288db2ef2344f26f4f939c029ac0679b7c999736b924a11d5f0fd97ec51e",
+      "hash": "9e87e10ac6a0dd96b3f1f99bbd9d829272938f246a4b299d569e290f8be99095"
+    },
+    {
+      "id": "387f36ed-8734-4cf5-b03e-98e38853fbc3",
+      "sequence": 9,
+      "type": "tool_call_started",
+      "at": "2026-10-02T21:07:54.523Z",
+      "data": {
+        "tool": "evaluate_checkout_options",
+        "input": {
+          "budgetCents": 360000,
+          "allowPoints": true,
+          "maxPoints": 100,
+          "paymentMethodIds": [
+            "mock-tap-go",
+            "mock-campus-wallet"
+          ]
+        }
+      },
+      "previousHash": "9e87e10ac6a0dd96b3f1f99bbd9d829272938f246a4b299d569e290f8be99095",
+      "hash": "dd836caee668a836c6ccb30f3f915182c228989bcf482fa78a1c06fca980e367"
+    },
+    {
+      "id": "88bac8e8-1d74-4b18-9117-5474be85e907",
+      "sequence": 10,
+      "type": "tool_call_completed",
+      "at": "2026-10-02T21:07:54.524Z",
+      "data": {
+        "tool": "evaluate_checkout_options",
+        "resultSummary": {
+          "status": "ok"
+        }
+      },
+      "previousHash": "dd836caee668a836c6ccb30f3f915182c228989bcf482fa78a1c06fca980e367",
+      "hash": "fba7dfb3470a506d6c2f9b83e47f1ee487079e5c8eb3cf841edaa42b62a6df25"
+    },
+    {
+      "id": "179ee819-eba8-4905-820b-6824e3371089",
+      "sequence": 11,
+      "type": "tool_call_started",
+      "at": "2026-10-02T21:07:54.524Z",
+      "data": {
+        "tool": "list_payment_methods",
+        "input": {
+          "merchantId": "campus-demo-store",
+          "amountCents": 339900
+        }
+      },
+      "previousHash": "fba7dfb3470a506d6c2f9b83e47f1ee487079e5c8eb3cf841edaa42b62a6df25",
+      "hash": "9a53468312943a931ed7dc318debb1bac54452ec55cac4ef2a830fdc88a9970a"
+    },
+    {
+      "id": "b6ef24c5-0c25-4732-ad19-c69996a2285b",
+      "sequence": 12,
+      "type": "tool_call_completed",
+      "at": "2026-10-02T21:07:54.524Z",
+      "data": {
+        "tool": "list_payment_methods",
+        "resultSummary": {
+          "count": 6
+        }
+      },
+      "previousHash": "9a53468312943a931ed7dc318debb1bac54452ec55cac4ef2a830fdc88a9970a",
+      "hash": "327f301df4adba2f3228fbf98da6ed1eba6a35753e3eb60989a1a05398b1ca9a"
+    },
+    {
+      "id": "5de22c8c-ee7c-44b6-b8b0-a76eaa5e6ed2",
+      "sequence": 13,
+      "type": "agent_state_transition",
+      "at": "2026-10-02T21:07:54.524Z",
+      "data": {
+        "node": "discovery",
+        "status": "completed"
+      },
+      "previousHash": "327f301df4adba2f3228fbf98da6ed1eba6a35753e3eb60989a1a05398b1ca9a",
+      "hash": "371ba2c8161612a2bbe8980ea8c9b59d61b92ece041f65f465f17814cc728977"
+    },
+    {
+      "id": "284ab2d4-06ee-4160-b6ca-b2ba38eb02b9",
+      "sequence": 14,
+      "type": "human_action_requested",
+      "at": "2026-10-02T21:07:54.525Z",
+      "data": {
+        "type": "purchase_authorization",
+        "actionId": "authorize_88169227-215"
+      },
+      "previousHash": "371ba2c8161612a2bbe8980ea8c9b59d61b92ece041f65f465f17814cc728977",
+      "hash": "2a6fb322afbb66436d2f610957d324100e06d2e48345d109d7985f035ccf1204"
+    },
+    {
+      "id": "908aff1d-42b9-4e94-9273-a3c26a383a17",
+      "sequence": 15,
+      "type": "human_action_resumed",
+      "at": "2026-10-02T21:07:54.525Z",
+      "data": {
+        "actionId": "authorize_88169227-215",
+        "decision": "reject"
+      },
+      "previousHash": "2a6fb322afbb66436d2f610957d324100e06d2e48345d109d7985f035ccf1204",
+      "hash": "e4062da016ca55c035ae864257e11ccb7ab162a8a48dbd1b07a77279e34add60"
+    },
+    {
+      "id": "5974b50b-1f48-40db-b97c-61127105e840",
+      "sequence": 16,
+      "type": "agent_run_finished",
+      "at": "2026-10-02T21:07:54.528Z",
+      "data": {
+        "status": "cancelled",
+        "outcomeType": "cancelled"
+      },
+      "previousHash": "e4062da016ca55c035ae864257e11ccb7ab162a8a48dbd1b07a77279e34add60",
+      "hash": "06eb8f2203dcbf29518c0e3506bd606f38d2d20387815a463757e9775d3fecd3"
+    }
+  ],
+  "transaction": {
+    "id": "22ccb4ce-40d5-4ae5-87c1-4337b4af32bb",
+    "scenario": "success",
+    "channel": "agent",
+    "ownerRunId": "2c23318e-c253-4029-8cd8-138704bdd0dc",
+    "state": "CANCELLED",
+    "environment": "sandbox",
+    "createdAt": "2026-10-02T21:07:54.523Z",
+    "policy": {
+      "budgetCents": 360000,
+      "allowPoints": true,
+      "maxPoints": 100,
+      "acceptableMerchantIds": [
+        "campus-demo-store",
+        "harbour-tech-sandbox",
+        "unimall-demo"
+      ],
+      "autoPay": true,
+      "priceIncreaseRule": "reconfirm_any_increase",
+      "paymentMethodIds": [
+        "mock-tap-go",
+        "mock-campus-wallet"
+      ]
+    },
+    "product": {
+      "id": "product-ipad-a16",
+      "sku": "EDU-IPAD-A16-128-SLV",
+      "name": "11-inch tablet (A16)",
+      "variant": "128GB · Wi‑Fi · Silver",
+      "quantity": 1,
+      "category": "Study device",
+      "listPriceCents": 359900,
+      "dataLabel": "Demo SKU aligned to the PRD research case; not a live merchant listing"
+    },
+    "user": {
+      "id": "demo-student-01",
+      "displayName": "Alex",
+      "studentStatus": "valid",
+      "credentialStatus": "active",
+      "credentialScope": "demo-merchant-student-offer",
+      "pointsBalance": 240
+    },
+    "identityEvidence": {
+      "providerId": "campuscart-sandbox-identity",
+      "studentStatus": "valid",
+      "credentialStatus": "active",
+      "checkedAt": "2026-10-02T21:07:54.523Z",
+      "source": "sandbox"
+    },
+    "evaluation": {
+      "plans": [
+        {
+          "id": "plan-campus-delivery",
+          "pathId": "campus-delivery",
+          "merchantId": "campus-demo-store",
+          "merchant": "Campus Demo Store",
+          "channel": "Demo web checkout",
+          "sku": "EDU-IPAD-A16-128-SLV",
+          "fulfillment": "Standard delivery · Sandbox promise",
+          "paymentMethodId": "mock-tap-go",
+          "appliedOffers": [
+            {
+              "id": "EDU-200",
+              "version": "1.2",
+              "title": "Verified student price"
+            },
+            {
+              "id": "SHIP-0",
+              "version": "1.1",
+              "title": "Demo free standard delivery"
+            }
+          ],
+          "productCents": 359900,
+          "shippingCents": 0,
+          "discountCents": 20000,
+          "pointsUsed": 0,
+          "pointsValueCents": 0,
+          "rewardCents": 0,
+          "cashOutCents": 339900,
+          "referenceCostCents": 339900,
+          "eligible": true,
+          "reasons": [],
+          "equation": "HK$3,599 + HK$0 − HK$200 − HK$0 points = HK$3,399"
+        },
+        {
+          "id": "plan-harbour-points",
+          "pathId": "harbour-points",
+          "merchantId": "harbour-tech-sandbox",
+          "merchant": "Harbour Tech Sandbox",
+          "channel": "Demo student portal",
+          "sku": "EDU-IPAD-A16-128-SLV",
+          "fulfillment": "Campus pickup · 3–5 demo days",
+          "paymentMethodId": "mock-campus-wallet",
+          "appliedOffers": [
+            {
+              "id": "HT-STUDENT-100",
+              "version": "2.0",
+              "title": "Harbour student saving"
+            }
+          ],
+          "productCents": 354900,
+          "shippingCents": 3000,
+          "discountCents": 10000,
+          "pointsUsed": 100,
+          "pointsValueCents": 5000,
+          "rewardCents": 0,
+          "cashOutCents": 342900,
+          "referenceCostCents": 347900,
+          "eligible": true,
+          "reasons": [],
+          "equation": "HK$3,549 + HK$30 − HK$100 − HK$50 points = HK$3,429"
+        },
+        {
+          "id": "plan-unimall-reward",
+          "pathId": "unimall-reward",
+          "merchantId": "unimall-demo",
+          "merchant": "UniMall Demo",
+          "channel": "Demo web checkout",
+          "sku": "EDU-IPAD-A16-128-SLV",
+          "fulfillment": "Store pickup · 2–4 demo days",
+          "paymentMethodId": "mock-tap-go",
+          "appliedOffers": [
+            {
+              "id": "UM-VOUCHER-120",
+              "version": "1.0",
+              "title": "UniMall web voucher"
+            }
+          ],
+          "productCents": 359900,
+          "shippingCents": 0,
+          "discountCents": 12000,
+          "pointsUsed": 0,
+          "pointsValueCents": 0,
+          "rewardCents": 2000,
+          "cashOutCents": 347900,
+          "referenceCostCents": 345900,
+          "eligible": true,
+          "reasons": [],
+          "equation": "HK$3,599 + HK$0 − HK$120 − HK$0 points = HK$3,479"
+        }
+      ],
+      "recommendedPlanId": "plan-campus-delivery",
+      "excludedOffers": [
+        {
+          "offerId": "MEGA-300-OLD",
+          "title": "Archived mega voucher",
+          "reasons": [
+            "Rule is not verified for execution",
+            "Offer has expired"
+          ]
+        }
+      ],
+      "evaluatedAt": "2026-10-02T21:07:54.523Z",
+      "objective": "Lowest verified reference cost; cash payment remains a hard budget constraint"
+    },
+    "authorization": null,
+    "lock": null,
+    "payment": null,
+    "order": null,
+    "outcome": {
+      "type": "cancelled",
+      "reason": {
+        "code": "USER_REJECTED",
+        "message": "The user rejected the proposed purchase."
+      },
+      "paymentSubmitted": false,
+      "paymentCallCount": 0
+    },
+    "pendingExecution": null,
+    "paymentAdapterCallCount": 0,
+    "audit": [
+      {
+        "id": "493eeb24-d12f-4a62-bbed-cdce8bd9abd9",
+        "sequence": 1,
+        "type": "task_created",
+        "at": "2026-10-02T21:07:54.523Z",
+        "state": "DRAFT",
+        "previousHash": "GENESIS",
+        "payload": {
+          "scenario": "success",
+          "sku": "EDU-IPAD-A16-128-SLV",
+          "channel": "agent",
+          "ownerRunId": "2c23318e-c253-4029-8cd8-138704bdd0dc",
+          "identityStatus": {
+            "studentStatus": "valid",
+            "credentialStatus": "active",
+            "providerId": "campuscart-sandbox-identity"
+          },
+          "environment": "sandbox",
+          "dataClassification": "synthetic_demo"
+        },
+        "hash": "9263fe81e291a5e332bbc0c480c71fd9b3338f0c1b91573328c3f30f22cc86cd"
+      },
+      {
+        "id": "61bd6890-1477-452f-b89f-12c7f924a3f7",
+        "sequence": 2,
+        "type": "plan_ranked",
+        "at": "2026-10-02T21:07:54.523Z",
+        "state": "OPTIONS_EVALUATED",
+        "previousHash": "9263fe81e291a5e332bbc0c480c71fd9b3338f0c1b91573328c3f30f22cc86cd",
+        "payload": {
+          "recommendedPlanId": "plan-campus-delivery",
+          "eligiblePlanIds": [
+            "plan-campus-delivery",
+            "plan-harbour-points",
+            "plan-unimall-reward"
+          ],
+          "excludedOfferIds": [
+            "MEGA-300-OLD"
+          ],
+          "policyDigest": "8cd95c07014b290e80d52101e9b9013a1bc9fc10ecea64fc23280d21e2eeb178"
+        },
+        "hash": "6acf38df44ac4ef60f86ea6e628e735802837d4561499abc845a1f4c9a2ed75d"
+      },
+      {
+        "id": "1a77fcc0-8994-40e5-842c-4d7f2529d7f3",
+        "sequence": 3,
+        "type": "transaction_cancelled",
+        "at": "2026-10-02T21:07:54.527Z",
+        "state": "CANCELLED",
+        "previousHash": "6acf38df44ac4ef60f86ea6e628e735802837d4561499abc845a1f4c9a2ed75d",
+        "payload": {
+          "reasonCode": "USER_REJECTED",
+          "paymentSubmitted": false,
+          "lockStatus": "not_created"
+        },
+        "hash": "543e8a06148aadd80e5ca9e1dc198752d22a608d5771c2572799ff8a7f34ef8d"
+      }
+    ],
+    "auditChainValid": true
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "campuscart-hacku-mvp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CampusCart — a verifiable student-benefit checkout agent sandbox for HacKU.",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "dev": "node --env-file-if-exists=.env --watch src/server.js",
+    "test": "node --test",
+    "demo": "node scripts/run-demo.js",
+    "demo:agent": "node scripts/run-agent-demo.js",
+    "demo:audits": "node scripts/export-demo-audits.js",
+    "smoke:llm": "node --env-file-if-exists=.env scripts/smoke-llm.js"
+  },
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.2.14",
+    "@langchain/langgraph": "^1.4.18",
+    "@langchain/openai": "^1.6.2",
+    "dotenv": "^18.0.5",
+    "langchain": "^1.5.15",
+    "openai": "^7.27.0",
+    "zod": "^4.6.5"
+  }
+}

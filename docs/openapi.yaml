@@ -1,0 +1,275 @@
+openapi: 3.1.0
+info:
+  title: CampusCart Agent API
+  version: 1.0.0
+  description: >-
+    Frontend-independent contract for the Hackathon sandbox. All bundled merchant,
+    identity and payment adapters use synthetic data. No real funds move.
+servers:
+  - url: http://localhost:3000
+paths:
+  /api/v1/agent/capabilities:
+    get:
+      summary: Inspect framework, model mode and adapter capabilities
+      responses:
+        "200":
+          description: Runtime capabilities and integration disclaimers
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+  /api/v1/agent/runs:
+    post:
+      summary: Start an Agent run from natural-language purchase intent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRun"
+      responses:
+        "201":
+          description: Run paused for authorization, or failed if intent is unsupported
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRun"
+        "422":
+          $ref: "#/components/responses/InvalidRequest"
+  /api/v1/agent/runs/{runId}:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      summary: Read the current public Agent run
+      responses:
+        "200":
+          description: Current run without private graph state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/agent/runs/{runId}/resume:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      summary: Resolve the current one-time human action
+      description: >-
+        The actionId must equal the run's current pendingAction.actionId. Replayed or
+        stale actions return 409. Expired actions return 410 ACTION_EXPIRED. Payment
+        decisions must also include the exact paymentSessionId, binding run + action +
+        provider session. A payment method cannot be changed here because it is bound
+        into the Benefit Lock; changing it requires a new evaluation and lock.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResumeRun"
+      responses:
+        "200":
+          description: Updated run, possibly paused for the next human action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRun"
+        "409":
+          description: Stale, already-used, or mismatched action
+        "410":
+          description: The current action expired and the transaction was closed
+        "422":
+          $ref: "#/components/responses/InvalidRequest"
+  /api/v1/agent/runs/{runId}/messages:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      summary: Ask a grounded question about this run
+      description: >-
+        With an LLM configured, the model can only inspect authoritative run facts
+        through a read-only tool. Without a key, deterministic answers cover the
+        chosen plan and recorded block reason.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+      responses:
+        "200":
+          description: Grounded answer and active Agent mode
+  /api/v1/agent/runs/{runId}/trace:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      summary: Read the hash-chained tool and state transition trace
+      responses:
+        "200":
+          description: Ordered trace events
+  /api/v1/agent/runs/{runId}/transaction:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      summary: Read the Agent-owned deterministic transaction and audit chain
+      description: This transaction cannot be executed through the retired legacy session API.
+      responses:
+        "200":
+          description: Current transaction state, Benefit Lock, outcome and audit events
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/agent/runs/{runId}/events:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    get:
+      summary: Stream existing and new trace events over SSE
+      responses:
+        "200":
+          description: text/event-stream with event type trace
+          content:
+            text/event-stream:
+              schema:
+                type: string
+components:
+  parameters:
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    InvalidRequest:
+      description: Zod validation failure
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Agent run not found
+  schemas:
+    CreateRun:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          examples:
+            - 帮我买这台 iPad，预算 HK$3,600，最多用 100 积分
+        context:
+          type: object
+          properties:
+            locale:
+              type: string
+              default: zh-HK
+            currency:
+              type: string
+              const: HKD
+            demoScenario:
+              type: string
+              enum: [success, blocked]
+              default: success
+            selectedProduct:
+              type: object
+              description: >-
+                Optional explicit product-page context. It is used only for deictic
+                requests such as “buy this item”; it never replaces an explicit
+                unsupported product request.
+              required: [sku, source, userConfirmed]
+              additionalProperties: false
+              properties:
+                sku:
+                  type: string
+                  examples: [EDU-IPAD-A16-128-SLV]
+                source:
+                  type: string
+                  enum: [product_page, catalog_selection]
+                userConfirmed:
+                  type: boolean
+                  const: true
+    ResumeRun:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [actionId, decision]
+          properties:
+            actionId:
+              type: string
+            decision:
+              type: string
+              enum: [approve, reject]
+        - type: object
+          additionalProperties: false
+          required: [actionId, decision, paymentSessionId]
+          properties:
+            actionId:
+              type: string
+            decision:
+              type: string
+              enum: [authenticated, failed]
+            paymentSessionId:
+              type: string
+    AgentRun:
+      type: object
+      required: [id, status, agentMode, framework, trace]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [running, needs_user_action, needs_clarification, completed, blocked, cancelled, expired, failed]
+        agentMode:
+          type: string
+          enum:
+            - langchain_llm_tools
+            - langgraph_deterministic_fallback
+            - langgraph_fallback_after_model_error
+        framework:
+          type: object
+          properties:
+            agent:
+              const: LangChain
+            orchestration:
+              const: LangGraph
+        pendingAction:
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: "null"
+        proposal:
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: "null"
+        outcome:
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: "null"
+        trace:
+          type: array
+          items:
+            type: object
+            required: [sequence, type, at, previousHash, hash]
+            additionalProperties: true
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+        issues:
+          type: array
+          items:
+            type: object
+            additionalProperties: true

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-HK">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#173f2b" />
+    <meta name="description" content="CampusCart verifies student benefits before a sandbox checkout." />
+    <title>CampusCart · Benefit Lock</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="CampusCart home">
+        <span class="brand-mark">C</span>
+        <span>CampusCart</span>
+      </a>
+      <div class="topbar-actions">
+        <span class="sandbox-badge"><span class="pulse"></span> Sandbox</span>
+        <button class="icon-button" id="help-button" aria-label="About this demo">?</button>
+      </div>
+    </header>
+
+    <div class="demo-disclosure">
+      <strong>Hackathon demo</strong>
+        <span>LangChain + LangGraph · synthetic commerce · no real purchase</span>
+    </div>
+
+    <main class="app-shell">
+      <aside class="journey-rail" aria-label="Checkout journey">
+        <div class="rail-intro">
+          <span class="eyebrow">Agentic checkout</span>
+          <h2>From intent to a verified decision.</h2>
+          <p>The Agent can recommend. The rules decide whether money may move.</p>
+        </div>
+        <ol id="desktop-steps" class="step-list"></ol>
+        <div class="rail-proof">
+          <span class="proof-icon">✓</span>
+          <div><strong>Deterministic guardrails</strong><small>Budget, points and offer rules run server-side.</small></div>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <div id="mobile-progress" class="mobile-progress"></div>
+        <div id="app" aria-live="polite">
+          <div class="loading-state"><span class="spinner"></span><p>Preparing the sandbox…</p></div>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status"></div>
+    <dialog id="about-dialog">
+      <button class="dialog-close" aria-label="Close">×</button>
+      <span class="eyebrow">What is real?</span>
+      <h2>A real decision engine around mock commerce.</h2>
+      <p>Eligibility, stacking, integer money maths, authorization scope, Benefit Lock validation, single-use execution and hash-chained audit are running code.</p>
+      <p>Merchants, offers, identity, payment and fulfilment are synthetic sandbox data. An optional configured LLM may be contacted for tool selection and explanation; it cannot authorize, lock or pay.</p>
+    </dialog>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
