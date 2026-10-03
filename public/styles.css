@@ -137,6 +137,13 @@ button { color: inherit; }
 .reference-line { margin-top: 9px; color: var(--forest); font-size: 10px; font-weight: 800; }
 .mini-facts { display: flex; gap: 6px; flex-wrap: wrap; }
 .mini-fact { padding: 4px 7px; border-radius: 6px; background: #eff1ed; font-size: 9px; color: #5e685f; }
+.plan-benefits { display: grid; gap: 6px; margin-top: 10px; }
+.plan-benefits > div { display: grid; grid-template-columns: 48px 1fr; gap: 8px; font-size: 10px; line-height: 1.4; }
+.plan-benefits strong { color: var(--forest); }
+.plan-benefits span { color: var(--muted); }
+.plan-choice { display: flex; min-width: 128px; flex-direction: column; align-items: flex-end; justify-content: space-between; gap: 15px; }
+.plan-select { min-width: 108px; padding: 8px 12px; border: 1px solid var(--forest-2); border-radius: 9px; background: white; color: var(--forest); cursor: pointer; font-size: 10px; font-weight: 800; }
+.plan-select.active { background: var(--forest); color: white; }
 .agent-trace { display: grid; grid-template-columns: repeat(4,1fr); gap: 5px; margin: 0 0 20px; }
 .trace-step { padding: 9px 7px; border-radius: 9px; color: #768079; background: #f0f2ef; text-align: center; font-size: 9px; font-weight: 800; }
 .trace-step.done { color: var(--forest); background: var(--lime-soft); }
@@ -308,6 +315,7 @@ dialog p { color: var(--muted); font-size: 12px; line-height: 1.6; }
   .setting-card.wide { grid-column: auto; }
   .plan-card { grid-template-columns: 1fr; gap: 10px; }
   .plan-price { text-align: left; display: flex; align-items: end; gap: 7px; }
+  .plan-choice { min-width: 0; flex-direction: row; align-items: end; }
   .agent-trace { grid-template-columns: repeat(4, minmax(0,1fr)); }
   .trace-step { padding: 8px 2px; font-size: 8px; }
   .decision-hero { grid-template-columns: 1fr; }

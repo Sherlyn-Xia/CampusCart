@@ -21,6 +21,7 @@ test("points never exceed the user's policy cap and remain an equity cost", () =
   const plan = result.plans.find((item) => item.id === "plan-harbour-points");
   assert.equal(plan.pointsUsed, 20, "redemption step is enforced");
   assert.equal(plan.pointsValueCents, 1000);
+  assert.equal(plan.pointsProgram.name, "Campus Wallet Points");
   assert.equal(plan.referenceCostCents, plan.cashOutCents + plan.pointsValueCents);
 });
 

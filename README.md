@@ -51,10 +51,10 @@ curl -X POST http://localhost:3000/api/v1/agent/runs \
   -H 'content-type: application/json' \
   -d '{"message":"帮我买这台 iPad，预算 HK$3,600，最多用 100 积分"}'
 
-# 2. 用响应中的 pendingAction.actionId 明确授权
+# 2. 用户从 pendingAction.eligiblePlanIds 中选择方案并明确授权
 curl -X POST http://localhost:3000/api/v1/agent/runs/RUN_ID/resume \
   -H 'content-type: application/json' \
-  -d '{"actionId":"authorize_...","decision":"approve"}'
+  -d '{"actionId":"authorize_...","decision":"approve","planId":"plan-harbour-points"}'
 
 # 3. 推荐做法：打开 pendingAction.url，在独立 Sandbox 页面完成认证。
 # 测试客户端也可直接恢复当前一次性 action：
@@ -76,7 +76,7 @@ curl -X POST http://localhost:3000/api/v1/agent/runs/RUN_ID/resume \
 | GET | `/api/v1/agent/runs/:id/events` | 通过 Server-Sent Events 实时订阅轨迹 |
 | GET | `/api/v1/agent/runs/:id/transaction` | 获取该 run 独占的交易状态与审计链 |
 
-`actionId` 只能使用一次；过期返回 `410 ACTION_EXPIRED`，串单、绑定错误和并发重放返回 409。支付认证必须同时匹配 `runId + actionId + paymentSessionId`。支付方式被写入 Benefit Lock，认证阶段不可偷偷更换。改用另一支付方式必须重新取得商户/优惠报价并重新授权。独立支付页用 `BroadcastChannel` 通知主页面，主页面每 2.5 秒轮询作为降级。
+`actionId` 只能使用一次；过期返回 `410 ACTION_EXPIRED`，串单、绑定错误和并发重放返回 409。首次授权允许用户从 `eligiblePlanIds` 中选择方案，后端会重新验证并把所选商户、优惠、积分计划和支付方式一起写入 Benefit Lock；推荐只是默认值，不替用户决定。支付认证必须同时匹配 `runId + actionId + paymentSessionId`，认证阶段不可偷偷更换方案或支付方式。独立支付页用 `BroadcastChannel` 通知主页面，主页面每 2.5 秒轮询作为降级。
 
 旧 `/api/sessions` 交易接口已返回 `410 LEGACY_TRANSACTION_API_RETIRED`。Agent 创建的 transaction 标记为 `channel=agent`，即使内部代码误调用旧 `execute()` 也会返回 `AGENT_TRANSACTION_ISOLATED`。首次拒绝、支付认证失败或 Agent 运行异常都会把 transaction 置为 `CANCELLED`，关闭活动锁并清空 `pendingExecution`。
 

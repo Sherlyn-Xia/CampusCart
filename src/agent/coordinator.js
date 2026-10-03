@@ -240,6 +240,10 @@ export class AgentCoordinator {
     const facts = {
       runStatus: run.status,
       recommendedPlan: run.proposal?.plan ?? null,
+      selectedPlan: run.proposal?.selectedPlanId
+        ? [run.proposal?.plan, ...(run.proposal?.alternativePlans ?? [])]
+          .find((plan) => plan?.id === run.proposal.selectedPlanId) ?? null
+        : null,
       alternatives: run.proposal?.alternativePlans ?? [],
       outcome: run.outcome,
       transactionState: transaction?.state ?? null,
@@ -254,14 +258,24 @@ export class AgentCoordinator {
           return JSON.stringify(facts);
         }, {
           name: "inspect_current_decision",
-          description: "Read the authoritative recommendation, outcome, transaction state and audit event types for this run.",
+          description: "Read the available options, recommendation, user-selected option, outcome and current transaction state for this run.",
           schema: z.object({}),
         });
         this.store.append(runId, "model_invocation_started", { purpose: "grounded_question_answer" });
         const agent = createAgent({
           model: this.model(),
           tools: [inspect],
-          systemPrompt: "Answer CampusCart questions only from inspect_current_decision. Call it before answering. If facts are missing, say so. Never claim a real payment or provider integration.",
+          systemPrompt: [
+            "You are the concise checkout assistant inside the CampusCart product UI.",
+            "Call inspect_current_decision before answering and use only those facts.",
+            "Answer only the user's exact question and match the user's language.",
+            "Default to one to three short sentences: lead with the plain-language conclusion, then give at most one useful comparison or next-state fact.",
+            "Do not use headings, bullet lists, tables, preambles, summaries, or offers to provide more detail unless the user explicitly asks for a detailed breakdown.",
+            "Do not expose internal field names, raw status values, plan IDs, path IDs, version numbers, audit events, or the word eligible unless the user explicitly asks for technical details.",
+            "Translate internal states into natural language, for example needs_user_action means waiting for the user's confirmation.",
+            "Mention the sandbox limitation only when the question is about payment, execution, or whether an integration is real.",
+            "If facts are missing, say so in one short sentence. Never claim a real payment or provider integration.",
+          ].join(" "),
         });
         const result = await agent.invoke({ messages: [{ role: "user", content: question }] });
         this.store.append(runId, "model_invocation_completed", { purpose: "grounded_question_answer" });

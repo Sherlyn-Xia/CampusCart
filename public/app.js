@@ -2,7 +2,7 @@ const steps = [
   ["Purchase intent", "意图"],
   ["Agent tools", "工具"],
   ["Compare", "方案"],
-  ["Why this", "解释"],
+  ["Questions", "问答"],
   ["Authorize", "授权"],
   ["Audit result", "审计"],
 ];
@@ -23,6 +23,7 @@ const state = {
   scenario: "success",
   message: defaultMessages.success,
   answer: null,
+  selectedPlanId: null,
   page: 0,
   busy: false,
 };
@@ -158,68 +159,90 @@ function toolsView() {
   </section>`;
 }
 
-function planCard(plan, recommendedId) {
+function allPlans() {
+  const proposal = state.run?.proposal;
+  if (!proposal) return [];
+  return proposal.plan
+    ? [proposal.plan, ...proposal.alternativePlans.filter((plan) => plan.id !== proposal.plan.id)]
+    : proposal.alternativePlans;
+}
+
+function selectedPlan() {
+  const plans = allPlans();
+  return plans.find((plan) => plan.id === (state.run?.proposal?.selectedPlanId ?? state.selectedPlanId))
+    ?? plans.find((plan) => plan.id === state.run?.proposal?.plan?.id)
+    ?? null;
+}
+
+function paymentName(methodId) {
+  return state.bootstrap?.paymentMethods?.find((method) => method.id === methodId)?.name ?? methodId;
+}
+
+function offerLabel(offer) {
+  if (!Number.isInteger(offer.valueCents)) return offer.title;
+  const value = offer.kind === "shipping_waiver" ? `saves ${money(offer.valueCents)}` : `−${money(offer.valueCents)}`;
+  return `${offer.title} (${value})`;
+}
+
+function planCard(plan, recommendedId, selectedId, comparisonOnly) {
   const recommended = plan.id === recommendedId;
-  return `<article class="plan-card ${recommended ? "selected recommended" : ""} ${plan.eligible ? "" : "ineligible"}">
+  const selected = plan.id === selectedId;
+  const selectable = plan.eligible && !comparisonOnly;
+  const offers = plan.appliedOffers.length ? plan.appliedOffers.map(offerLabel).join(" · ") : "No offers applied";
+  const points = plan.pointsUsed
+    ? `${plan.pointsUsed} ${escapeHtml(plan.pointsProgram?.name ?? "points")} (−${money(plan.pointsValueCents)})`
+    : "No points used";
+  return `<article class="plan-card ${selected ? "selected" : ""} ${recommended ? "recommended" : ""} ${plan.eligible ? "" : "ineligible"}" ${selectable ? `data-plan-id="${escapeHtml(plan.id)}"` : ""}>
     <div>
       <div class="plan-title-row"><h3>${escapeHtml(plan.merchant)}</h3>${recommended ? `<span class="winner-pill">Recommended</span>` : ""}${!plan.eligible ? `<span class="tag">Not executable</span>` : ""}</div>
-      <div class="plan-details">${escapeHtml(plan.fulfillment)} · ${escapeHtml(plan.paymentMethodId)}</div>
-      <div class="mini-facts"><span class="mini-fact">${plan.appliedOffers.length} offer(s)</span><span class="mini-fact">${plan.pointsUsed} points</span></div>
+      <div class="plan-details">${escapeHtml(plan.fulfillment)} · ${escapeHtml(paymentName(plan.paymentMethodId))}</div>
+      <div class="plan-benefits"><div><strong>Offers</strong><span>${escapeHtml(offers)}</span></div><div><strong>Points</strong><span>${points}</span></div></div>
       <div class="equation" style="margin-top:9px">${escapeHtml(plan.equation)}</div>
       ${plan.reasons.length ? `<div class="plan-reasons">${plan.reasons.map(escapeHtml).join(" · ")}</div>` : ""}
     </div>
-    <div class="plan-price"><strong>${money(plan.cashOutCents)}</strong><span>pay now</span><div class="reference-line">${money(plan.referenceCostCents)} ref. cost</div></div>
+    <div class="plan-choice"><div class="plan-price"><strong>${money(plan.cashOutCents)}</strong><span>pay now</span></div>${selectable ? `<button class="plan-select ${selected ? "active" : ""}" data-plan-id="${escapeHtml(plan.id)}">${selected ? "✓ Your choice" : "Choose"}</button>` : ""}</div>
   </article>`;
 }
 
 function compareView() {
   const { proposal } = state.run;
-  const plans = proposal.plan ? [proposal.plan, ...proposal.alternativePlans.filter((plan) => plan.id !== proposal.plan.id)] : proposal.alternativePlans;
-  const budgetEvidence = proposal.intent?.evidence?.budget;
+  const plans = allPlans();
   const comparisonOnly = state.run.status === "needs_clarification";
   return `<section class="screen">
-    ${heading("Deterministic decision", comparisonOnly ? "Comparison only — authorization is disabled." : proposal.plan ? "One executable winner." : "No executable plan.", "Budget, identity, offer stacking and payment constraints are enforced before the Agent asks for authorization.")}
+    ${heading("Your options", comparisonOnly ? "Compare now, decide after adding a budget." : proposal.plan ? "Choose the option that works for you." : "No option is currently available.", "The Agent marks its lowest-cost recommendation, but the final decision is yours.")}
     <div class="screen-body">
-      ${proposal.identity ? `<div class="identity-proof"><span class="check-dot">✓</span><div><strong>Identity evidence entered the rule engine</strong><small>studentStatus=${escapeHtml(proposal.identity.studentStatus)} · credentialStatus=${escapeHtml(proposal.identity.credentialStatus)} · no student number stored</small></div></div>` : ""}
-      ${budgetEvidence ? `<div class="data-note"><strong>Budget parse evidence:</strong> “${escapeHtml(budgetEvidence.original ?? "No budget text provided")}” → ${budgetEvidence.parsedValue == null ? escapeHtml(budgetEvidence.status.toUpperCase()) : `${budgetEvidence.parsedValue} cents (${money(budgetEvidence.parsedValue)})`}. No default budget is injected.</div>` : ""}
-      <div class="plan-stack" style="margin-top:14px">${plans.map((plan) => planCard(plan, proposal.plan?.id)).join("")}</div>
+      <div class="plan-stack">${plans.map((plan) => planCard(plan, proposal.plan?.id, state.selectedPlanId, comparisonOnly)).join("")}</div>
     </div>
-    ${footer({ nextLabel: comparisonOnly ? "Resolve missing details" : proposal.plan ? "Ask why" : "See blocked result", nextAction: comparisonOnly ? "show-outcome" : proposal.plan ? "next" : "show-outcome" })}
+    ${footer({ nextLabel: comparisonOnly ? "Resolve missing details" : proposal.plan ? "Continue with my choice" : "See result", nextAction: comparisonOnly ? "show-outcome" : proposal.plan ? "next" : "show-outcome", disabled: !comparisonOnly && proposal.plan && !state.selectedPlanId })}
   </section>`;
 }
 
 function explanationView() {
-  const plan = state.run.proposal.plan;
-  const alternatives = state.run.proposal.alternativePlans.filter((item) => item.id !== plan.id);
   return `<section class="screen">
-    ${heading("Grounded Q&A", "Ask why—then inspect the evidence.", "With an LLM key, the answer must call a read-only decision-inspection tool. Without a key, the deterministic fallback answers from the same recorded facts.")}
+    ${heading("Questions", "Anything you want to check?", "Ask about an offer, points, delivery, payment method or the difference between options.")}
     <div class="screen-body">
-      <div class="decision-hero"><div><span class="eyebrow">Selected path</span><h3>${escapeHtml(plan.merchant)}</h3><p>${escapeHtml(state.run.proposal.summary)}</p></div><div class="decision-price"><strong>${money(plan.cashOutCents)}</strong><span>verified pay-now amount</span></div></div>
-      <div class="reason-grid">
-        <div class="reason-card"><h4>Why this</h4><ul><li>Lowest eligible reference cost: ${money(plan.referenceCostCents)}.</li><li>Exact SKU and verified identity snapshot entered deterministic evaluation.</li><li>Payment method ${escapeHtml(plan.paymentMethodId)} is bound into the proposed lock.</li></ul></div>
-        <div class="reason-card"><h4>Why not the others</h4><ul>${alternatives.map((item) => `<li><strong>${escapeHtml(item.merchant)}:</strong> ${item.eligible ? `${money(item.referenceCostCents)} reference cost` : escapeHtml(item.reasons.join(", "))}.</li>`).join("")}</ul></div>
-      </div>
       <div class="qa-card">
-        <label for="question"><strong>Question for this run</strong></label>
-        <div class="qa-input"><input id="question" value="为什么选择这个优惠？"><button class="button button-secondary" data-action="ask">Ask Agent</button></div>
-        ${state.answer ? `<div class="qa-answer"><span class="eyebrow">Grounded answer</span><p>${escapeHtml(state.answer)}</p></div>` : ""}
+        <label for="question"><strong>Ask about these options</strong></label>
+        <div class="qa-input"><input id="question" value="这些方案的优惠和积分有什么区别？"><button class="button button-secondary" data-action="ask">Ask</button></div>
+        ${state.answer ? `<div class="qa-answer"><p>${escapeHtml(state.answer)}</p></div>` : ""}
       </div>
     </div>
-    ${footer({ nextLabel: "Review authorization" })}
+    ${footer({ nextLabel: "Review my choice" })}
   </section>`;
 }
 
 function lockDetails(transaction) {
   const lock = transaction?.lock;
-  const plan = state.run.proposal.plan;
+  const plan = selectedPlan();
   return `<div class="lock-document"><div class="lock-head"><div><span class="eyebrow">${lock ? `${escapeHtml(lock.status)} · single use` : "Authorization proposal"}</span><h3>Benefit Lock</h3></div><div class="lock-seal">⌁</div></div>
     <div class="lock-rows">
       <div class="lock-row"><span>SKU</span><strong>${escapeHtml(plan.sku)}</strong></div>
       <div class="lock-row"><span>Merchant</span><strong>${escapeHtml(plan.merchant)}</strong></div>
       <div class="lock-row"><span>Pay now</span><strong>${money(plan.cashOutCents)}</strong></div>
       <div class="lock-row"><span>Authorization cap</span><strong>${money(transaction?.policy.budgetCents ?? plan.cashOutCents)}</strong></div>
-      <div class="lock-row"><span>Payment</span><strong>${escapeHtml(plan.paymentMethodId)}</strong></div>
-      <div class="lock-row"><span>Offers</span><strong>${plan.appliedOffers.map((offer) => `${escapeHtml(offer.id)} v${escapeHtml(offer.version)}`).join(" · ")}</strong></div>
+      <div class="lock-row"><span>Payment</span><strong>${escapeHtml(paymentName(plan.paymentMethodId))}</strong></div>
+      <div class="lock-row"><span>Offers</span><strong>${plan.appliedOffers.map((offer) => escapeHtml(offer.title)).join(" · ") || "None"}</strong></div>
+      <div class="lock-row"><span>Points</span><strong>${plan.pointsUsed ? `${plan.pointsUsed} ${escapeHtml(plan.pointsProgram?.name ?? "points")} (−${money(plan.pointsValueCents)})` : "None"}</strong></div>
       <div class="lock-row"><span>Valid until</span><strong>${lock ? dateTime(lock.expiresAt) : "Created only after approval"}</strong></div>
     </div><div class="lock-hash">${lock ? `SHA-256 · ${lock.digest}` : "No lock exists before the first human action."}</div></div>`;
 }
@@ -319,6 +342,9 @@ function startTraceStream(runId) {
 async function refreshRun(runId = state.run?.id) {
   if (!runId) return;
   state.run = await request(`/api/v1/agent/runs/${encodeURIComponent(runId)}`);
+  const availablePlanIds = allPlans().map((plan) => plan.id);
+  if (state.run.proposal?.selectedPlanId) state.selectedPlanId = state.run.proposal.selectedPlanId;
+  else if (!availablePlanIds.includes(state.selectedPlanId)) state.selectedPlanId = state.run.proposal?.plan?.id ?? null;
   const trace = await request(`/api/v1/agent/runs/${encodeURIComponent(runId)}/trace`);
   mergeTrace(trace.events);
   try {
@@ -389,9 +415,11 @@ async function resume(decision) {
   state.busy = true;
   render();
   try {
+    const body = { actionId: state.run.pendingAction.actionId, decision };
+    if (decision === "approve" && state.run.pendingAction.type === "purchase_authorization") body.planId = state.selectedPlanId;
     state.run = await request(`/api/v1/agent/runs/${encodeURIComponent(state.run.id)}/resume`, {
       method: "POST",
-      body: { actionId: state.run.pendingAction.actionId, decision },
+      body,
     });
     await refreshRun();
     if (state.run.pendingAction?.type === "payment_authentication") notify("Benefit Lock created. Complete the separate sandbox authentication.");
@@ -441,6 +469,7 @@ function restart() {
   state.transaction = null;
   state.trace = [];
   state.answer = null;
+  state.selectedPlanId = null;
   state.page = 0;
   state.scenario = state.scenario === "success" ? "blocked" : "success";
   state.message = defaultMessages[state.scenario];
@@ -449,6 +478,16 @@ function restart() {
 }
 
 document.addEventListener("click", async (event) => {
+  const planId = event.target.closest("[data-plan-id]")?.dataset.planId;
+  if (planId) {
+    const plan = allPlans().find((candidate) => candidate.id === planId);
+    if (plan?.eligible) {
+      state.selectedPlanId = planId;
+      state.answer = null;
+      render();
+    }
+    return;
+  }
   const scenario = event.target.closest("[data-scenario]")?.dataset.scenario;
   if (scenario && !state.run) {
     state.scenario = scenario;

@@ -59,9 +59,11 @@ paths:
       description: >-
         The actionId must equal the run's current pendingAction.actionId. Replayed or
         stale actions return 409. Expired actions return 410 ACTION_EXPIRED. Payment
+        purchase approval may include one of pendingAction.eligiblePlanIds as planId;
+        omitting it keeps the recommendation for backwards compatibility. Payment
         decisions must also include the exact paymentSessionId, binding run + action +
-        provider session. A payment method cannot be changed here because it is bound
-        into the Benefit Lock; changing it requires a new evaluation and lock.
+        provider session. A payment method cannot be changed after the selected plan is
+        locked; changing it requires a new evaluation and lock.
       requestBody:
         required: true
         content:
@@ -206,7 +208,19 @@ components:
               type: string
             decision:
               type: string
-              enum: [approve, reject]
+              const: approve
+            planId:
+              type: string
+              description: An ID from the current purchase action's eligiblePlanIds; defaults to the recommendation when omitted.
+        - type: object
+          additionalProperties: false
+          required: [actionId, decision]
+          properties:
+            actionId:
+              type: string
+            decision:
+              type: string
+              const: reject
         - type: object
           additionalProperties: false
           required: [actionId, decision, paymentSessionId]

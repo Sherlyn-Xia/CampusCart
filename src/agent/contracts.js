@@ -15,7 +15,12 @@ export const AgentRunRequestSchema = z.object({
 }).strict();
 
 export const ResumeRequestSchema = z.discriminatedUnion("decision", [
-  z.object({ actionId: z.string().min(1), decision: z.enum(["approve", "reject"]) }).strict(),
+  z.object({
+    actionId: z.string().min(1),
+    decision: z.literal("approve"),
+    planId: z.string().min(1).optional(),
+  }).strict(),
+  z.object({ actionId: z.string().min(1), decision: z.literal("reject") }).strict(),
   z.object({
     actionId: z.string().min(1),
     decision: z.enum(["authenticated", "failed"]),

@@ -74,7 +74,7 @@ DRAFT → OPTIONS_EVALUATED → USER_AUTHORIZED → BENEFIT_LOCKED
 
 每个 Agent run 有稳定 `thread_id`。LangGraph 的 `interrupt()` 返回一次性 `actionId`：
 
-1. `purchase_authorization`：绑定具体方案与最大现金金额；
+1. `purchase_authorization`：返回合规方案列表，由用户选择一个方案并绑定最大现金金额；
 2. `payment_authentication`：绑定 payment session、支付方式和金额。
 
 客户端通过 `POST /api/v1/agent/runs/:id/resume` 恢复。支付动作必须同时匹配 `runId + actionId + paymentSessionId`；过期动作将 transaction 设为 `EXPIRED` 并关闭锁。当前 Sandbox provider redirect 是可操作的 `/sandbox/payment-auth/...` 页面，成功或失败都会消费当前 action；失败会把 transaction 设为 `CANCELLED`、关闭锁并清除 pending execution。支付页通过 `BroadcastChannel` 通知主页面，2.5 秒轮询作为降级。当前使用内存 `MemorySaver`；服务重启后 run 无法恢复。真实 provider 必须使用持久 checkpointer/数据库，并由验签 webhook 恢复图，而不是相信浏览器自行声称“认证成功”。

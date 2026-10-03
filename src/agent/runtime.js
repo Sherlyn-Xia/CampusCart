@@ -59,8 +59,11 @@ export class AgentRuntime {
         action: {
           actionId: `authorize_${randomUUID().slice(0, 12)}`,
           type: "purchase_authorization",
-          message: "Approve this exact sandbox plan and its spending boundary?",
+          message: "Choose and approve one eligible sandbox plan within the spending boundary.",
           planId: result.recommendedPlanId,
+          eligiblePlanIds: transaction.evaluation.plans
+            .filter((plan) => plan.eligible)
+            .map((plan) => plan.id),
           maxPaymentCents: transaction.policy.budgetCents,
           expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
         },
@@ -80,7 +83,9 @@ export class AgentRuntime {
 
     const authorizeAndPrecheck = async (state) => {
       this.store.append(state.runId, "agent_state_transition", { node: "authorize_and_precheck", status: "started" });
-      this.transactionService.authorize(state.transactionSessionId, { planId: state.recommendedPlanId });
+      this.transactionService.authorize(state.transactionSessionId, {
+        planId: state.authorizationDecision.planId ?? state.recommendedPlanId,
+      });
       this.transactionService.createLock(state.transactionSessionId);
       const prepared = this.transactionService.prepareExecution(state.transactionSessionId);
       this.store.append(state.runId, "agent_state_transition", {
@@ -277,7 +282,24 @@ export class AgentRuntime {
       error.code = "PAYMENT_ACTION_BINDING_MISMATCH";
       throw error;
     }
-    this.store.append(runId, "human_action_resumed", { actionId: request.actionId, decision: request.decision });
+    if (run.pendingAction.type === "purchase_authorization" && request.decision === "approve") {
+      const selectedPlanId = request.planId ?? run.pendingAction.planId;
+      if (!run.pendingAction.eligiblePlanIds?.includes(selectedPlanId)) {
+        const error = new Error("The selected plan is not available for this authorization");
+        error.statusCode = 422;
+        error.code = "PLAN_NOT_AVAILABLE";
+        throw error;
+      }
+      request.planId = selectedPlanId;
+      this.store.update(runId, {
+        proposal: { ...run.proposal, selectedPlanId },
+      });
+    }
+    this.store.append(runId, "human_action_resumed", {
+      actionId: request.actionId,
+      decision: request.decision,
+      planId: request.planId,
+    });
     this.store.update(runId, { status: "running", pendingAction: null });
     try {
       const result = await this.graph.invoke(new Command({ resume: request }), this.config(run));

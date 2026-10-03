@@ -66,6 +66,63 @@ test("natural-language request runs through LangGraph tools and two human approv
   assert.equal(trace.every((event, index) => index === 0 || event.previousHash === trace[index - 1].hash), true);
 });
 
+test("the user can authorize any eligible alternative instead of the Agent recommendation", async () => {
+  const { agent } = runtime();
+  let run = await agent.createRun({
+    message: "帮我买这台 iPad，预算 HK$3,600，最多用 100 积分",
+    context: { selectedProduct },
+  });
+  const pointsPlan = run.proposal.alternativePlans.find((plan) => plan.id === "plan-harbour-points");
+
+  assert.equal(pointsPlan.pointsProgram.name, "Campus Wallet Points");
+  assert.deepEqual([...run.pendingAction.eligiblePlanIds].sort(), [
+    "plan-campus-delivery",
+    "plan-harbour-points",
+    "plan-unimall-reward",
+  ]);
+  assert.ok(run.pendingAction.eligiblePlanIds.includes(pointsPlan.id));
+
+  run = await agent.resume(run.id, {
+    actionId: run.pendingAction.actionId,
+    decision: "approve",
+    planId: pointsPlan.id,
+  });
+
+  const transaction = agent.getTransaction(run.id);
+  assert.equal(run.proposal.selectedPlanId, pointsPlan.id);
+  assert.equal(transaction.authorization.planId, pointsPlan.id);
+  assert.equal(transaction.lock.planId, pointsPlan.id);
+  assert.equal(transaction.lock.paymentMethodId, "mock-campus-wallet");
+  assert.equal(run.pendingAction.paymentMethodId, "mock-campus-wallet");
+
+  run = await agent.resume(run.id, {
+    actionId: run.pendingAction.actionId,
+    decision: "authenticated",
+    paymentSessionId: run.pendingAction.paymentSessionId,
+  });
+  assert.equal(run.status, "completed");
+  assert.equal(run.outcome.finalQuote.id, pointsPlan.id);
+  assert.equal(run.outcome.finalQuote.pointsUsed, 100);
+});
+
+test("purchase authorization rejects a plan outside the eligible choices", async () => {
+  const { agent } = runtime();
+  const run = await agent.createRun({
+    message: "预算 HK$3,600，帮我买这台 iPad",
+    context: { selectedProduct },
+  });
+
+  await assert.rejects(
+    agent.resume(run.id, {
+      actionId: run.pendingAction.actionId,
+      decision: "approve",
+      planId: "plan-not-offered",
+    }),
+    (error) => error.statusCode === 422 && error.code === "PLAN_NOT_AVAILABLE",
+  );
+  assert.equal(agent.getRun(run.id).status, "needs_user_action");
+});
+
 test("blocked run stops before any payment authorization tool is called", async () => {
   const { agent } = runtime();
   let run = await agent.createRun({
