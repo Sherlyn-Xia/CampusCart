@@ -32,6 +32,11 @@ export const AgentMessageRequestSchema = z.object({
   message: z.string().min(1).max(2000),
 }).strict();
 
+export const AgentFeedbackRequestSchema = z.object({
+  rating: z.enum(["helpful", "unhelpful"]),
+  note: z.string().min(1).max(1000).optional(),
+}).strict();
+
 export const PurchaseIntentSchema = z.object({
   rawText: z.string(),
   product: z.object({

@@ -14,11 +14,17 @@ const method = (methodId, displayName, methodType, integrationStatus, actionType
 });
 
 export class MockPaymentAdapter {
-  constructor({ clock = () => new Date() } = {}) {
+  constructor({ clock = () => new Date(), repository = null } = {}) {
     this.id = "campuscart-payment-orchestrator";
     this.kind = "payment";
-    this.sessions = new Map();
+    this.repository = repository;
+    this.sessions = new Map((repository?.all() ?? []).map((session) => [session.id, session]));
     this.clock = clock;
+  }
+
+  save(session) {
+    this.repository?.save(session);
+    return structuredClone(session);
   }
 
   async listAvailableMethods({ merchantId }) {
@@ -57,7 +63,7 @@ export class MockPaymentAdapter {
       },
     };
     this.sessions.set(id, session);
-    return structuredClone(session);
+    return this.save(session);
   }
 
   async confirmAuthorization(id, decision, binding) {
@@ -79,10 +85,13 @@ export class MockPaymentAdapter {
       error.code = "ACTION_EXPIRED";
       throw error;
     }
-    if (decision !== "authenticated") return { ...session, status: "failed" };
+    if (decision !== "authenticated") {
+      session.status = "failed";
+      return this.save(session);
+    }
     session.status = "authorized";
     session.authenticatedAt = this.clock().toISOString();
     session.externalPaymentId = `pay_agent_${randomUUID().slice(0, 10)}`;
-    return structuredClone(session);
+    return this.save(session);
   }
 }

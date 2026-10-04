@@ -13,14 +13,21 @@ function digest(value) {
 }
 
 export class TransactionService {
-  constructor({ clock = () => new Date() } = {}) {
+  constructor({ clock = () => new Date(), repository = null } = {}) {
     this.clock = clock;
-    this.sessions = new Map();
-    this.paymentCallCount = 0;
+    this.repository = repository;
+    const restored = repository?.all() ?? [];
+    this.sessions = new Map(restored.map((session) => [session.id, session]));
+    this.paymentCallCount = restored.reduce((total, session) => total + (session.paymentAdapterCallCount ?? 0), 0);
   }
 
   now() {
     return this.clock().toISOString();
+  }
+
+  commit(session) {
+    this.repository?.save(session);
+    return this.snapshot(session);
   }
 
   getBootstrap() {
@@ -78,7 +85,7 @@ export class TransactionService {
       environment: "sandbox",
       dataClassification: "synthetic_demo",
     }, this.now());
-    return this.snapshot(session);
+    return this.commit(session);
   }
 
   requireSession(id) {
@@ -89,6 +96,16 @@ export class TransactionService {
       throw error;
     }
     return session;
+  }
+
+  findByOwnerRunId(runId) {
+    const session = [...this.sessions.values()].find((candidate) => candidate.ownerRunId === runId);
+    return session ? this.snapshot(session) : null;
+  }
+
+  findByOrderId(orderId) {
+    const session = [...this.sessions.values()].find((candidate) => candidate.order?.id === orderId);
+    return session ? this.snapshot(session) : null;
   }
 
   requireState(session, allowed) {
@@ -118,7 +135,7 @@ export class TransactionService {
       excludedOfferIds: session.evaluation.excludedOffers.map((item) => item.offerId),
       policyDigest: digest(session.policy),
     }, this.now());
-    return this.snapshot(session);
+    return this.commit(session);
   }
 
   authorize(id, { planId, policy = {} } = {}) {
@@ -170,7 +187,7 @@ export class TransactionService {
       maxPoints: session.policy.allowPoints ? session.policy.maxPoints : 0,
       autoPay: true,
     }, this.now());
-    return this.snapshot(session);
+    return this.commit(session);
   }
 
   createLock(id) {
@@ -217,7 +234,7 @@ export class TransactionService {
       offerVersions: evidence.map(({ id: offerId, version }) => ({ offerId, version })),
       expiresAt,
     }, this.now());
-    return this.snapshot(session);
+    return this.commit(session);
   }
 
   buildFinalQuote(session) {
@@ -255,7 +272,7 @@ export class TransactionService {
       finalCashOutCents: finalQuote.cashOutCents,
       maxPaymentCents: session.lock.maxPaymentCents,
     }, this.now());
-    return this.snapshot(session);
+    return this.commit(session);
   }
 
   blockBeforeAuthorization(id, failure) {
@@ -277,7 +294,7 @@ export class TransactionService {
       paymentAdapterCallDelta: 0,
       stage: "before_authorization",
     }, this.now());
-    return this.snapshot(session);
+    return this.commit(session);
   }
 
   requireClarification(id, reason) {
@@ -297,12 +314,12 @@ export class TransactionService {
       paymentSubmitted: false,
       stage: "before_authorization",
     }, this.now());
-    return this.snapshot(session);
+    return this.commit(session);
   }
 
   cancel(id, reason = { code: "USER_CANCELLED", message: "The user cancelled the transaction." }) {
     const session = this.requireSession(id);
-    if (["COMPLETED", "BLOCKED", "CANCELLED", "EXPIRED", "NEEDS_CLARIFICATION"].includes(session.state)) return this.snapshot(session);
+    if (["COMPLETED", "REFUNDED", "BLOCKED", "CANCELLED", "EXPIRED", "NEEDS_CLARIFICATION"].includes(session.state)) return this.snapshot(session);
     if (session.lock?.status === "active") {
       session.lock.status = "closed_cancelled";
       session.lock.closedAt = this.now();
@@ -324,12 +341,12 @@ export class TransactionService {
       paymentSubmitted: false,
       lockStatus: session.lock?.status ?? "not_created",
     }, this.now());
-    return this.snapshot(session);
+    return this.commit(session);
   }
 
   expire(id, reason = { code: "ACTION_EXPIRED", message: "The pending human action expired before it was used." }) {
     const session = this.requireSession(id);
-    if (["COMPLETED", "BLOCKED", "CANCELLED", "EXPIRED"].includes(session.state)) return this.snapshot(session);
+    if (["COMPLETED", "REFUNDED", "BLOCKED", "CANCELLED", "EXPIRED"].includes(session.state)) return this.snapshot(session);
     if (session.lock?.status === "active") {
       session.lock.status = "closed_expired";
       session.lock.closedAt = this.now();
@@ -351,7 +368,7 @@ export class TransactionService {
       paymentSubmitted: false,
       lockStatus: session.lock?.status ?? "not_created",
     }, this.now());
-    return this.snapshot(session);
+    return this.commit(session);
   }
 
   prepareExecution(id) {
@@ -384,7 +401,7 @@ export class TransactionService {
       authorizationId: session.authorization.id,
       quoteDigest: session.pendingExecution.quoteDigest,
     }, this.now());
-    return this.snapshot(session);
+    return this.commit(session);
   }
 
   completeExternalPayment(id, receipt) {
@@ -459,7 +476,72 @@ export class TransactionService {
       cashOutCents: finalQuote.cashOutCents,
       orderId: session.order.id,
     }, this.now());
-    return this.snapshot(session);
+    return this.commit(session);
+  }
+
+  refundCompletedOrder(id, { caseId, requestedAction, reason }) {
+    const session = this.requireSession(id);
+    if (session.state === "REFUNDED") {
+      if (session.afterSales?.some((entry) => entry.caseId === caseId)) return this.snapshot(session);
+      const error = new Error("This order has already been refunded by another service case");
+      error.statusCode = 409;
+      error.code = "ORDER_ALREADY_REFUNDED";
+      throw error;
+    }
+    this.requireState(session, ["COMPLETED"]);
+    if (!session.order || !session.payment || session.outcome?.type !== "success") {
+      const error = new Error("Only a completed paid order can enter the refund workflow");
+      error.statusCode = 409;
+      error.code = "ORDER_NOT_REFUNDABLE";
+      throw error;
+    }
+    const refundedAt = this.now();
+    const finalQuote = session.outcome.finalQuote;
+    const refund = {
+      id: `refund_demo_${randomUUID().slice(0, 8)}`,
+      caseId,
+      status: "refunded_sandbox",
+      amountCents: session.payment.amountCents,
+      pointsRestored: finalQuote.pointsUsed ?? 0,
+      requestedAction,
+      reason,
+      refundedAt,
+      disclaimer: "Simulated refund. No real funds moved.",
+    };
+    appendAudit(session, "refund_submitted", {
+      caseId,
+      refundId: refund.id,
+      amountCents: refund.amountCents,
+      requestedAction,
+      idempotencyKey: `refund-${caseId}`,
+    }, refundedAt);
+    session.payment = {
+      ...session.payment,
+      status: "refunded_sandbox",
+      refundedAt,
+      refundId: refund.id,
+    };
+    session.order = {
+      ...session.order,
+      status: requestedAction === "cancel_order" ? "cancelled_refunded" : "refunded_sandbox",
+      updatedAt: refundedAt,
+    };
+    session.afterSales = [...(session.afterSales ?? []), refund];
+    session.state = "REFUNDED";
+    appendAudit(session, "refund_completed", {
+      caseId,
+      refundId: refund.id,
+      amountCents: refund.amountCents,
+      pointsRestored: refund.pointsRestored,
+      paymentStatus: session.payment.status,
+      orderStatus: session.order.status,
+    }, refundedAt);
+    appendAudit(session, "order_status_changed", {
+      orderId: session.order.id,
+      status: session.order.status,
+      refundId: refund.id,
+    }, refundedAt);
+    return this.commit(session);
   }
 
   execute(id) {

@@ -13,6 +13,7 @@ flowchart LR
   ID -->|authoritative minimal status snapshot| RE
   LC --> RE[Deterministic Evaluation Tool]
   LC --> PM[Payment Capability Tool]
+  LC --> KB[(SQLite RAG Knowledge)]
   RE --> TX[Transaction Core]
   LG -->|explicit authorization only| TX
   TX --> BL[Benefit Lock + PRECHECK]
@@ -20,6 +21,10 @@ flowchart LR
   BL -->|ALLOW| PA[Async Payment Auth Adapter]
   PA -->|verified sandbox receipt| TX
   TX --> DONE[Completed outcome]
+  DONE --> AS[After-sales State Machine]
+  AS --> REF[Refunded outcome]
+  LG --> RM[(Structured Reflection Memory)]
+  LG & TX & PA & AS & KB & RM --> DB[(SQLite Persistence)]
   LG & LC & CAT & MQ & ID & RE & PM & PA --> AT[(Agent Trace Hash Chain)]
   TX & BL & STOP & DONE --> TT[(Transaction Audit Hash Chain)]
 ```
@@ -40,7 +45,7 @@ discovery
       ├─ BLOCKED → finish
       └─ ALLOW → prepare_payment
                   → wait_for_payment [interrupt]
-                  → complete_payment → finish
+                  → complete_payment → finish → reflect
   ↘ reject / auth failed / runtime error → cancel transaction → finish
 ```
 
@@ -53,6 +58,7 @@ DRAFT → OPTIONS_EVALUATED → USER_AUTHORIZED → BENEFIT_LOCKED
       ↘ NEEDS_CLARIFICATION
       ↘ CANCELLED
       ↘ EXPIRED
+COMPLETED → REFUNDED [separate after-sales confirmation]
 ```
 
 两者不应合并。即使未来更换 Agent framework 或模型，交易状态机仍是唯一资金动作权威。
@@ -67,6 +73,7 @@ DRAFT → OPTIONS_EVALUATED → USER_AUTHORIZED → BENEFIT_LOCKED
 | `evaluate_checkout_options` | Deterministic core | 可创建评估 session | 否 |
 | `list_payment_methods` | Payment adapter | 只读 capability discovery | 否 |
 | `inspect_current_decision` | Run + transaction snapshot | 只读问答依据 | 否 |
+| `retrieve_campuscart_knowledge` | SQLite FTS5 knowledge store | 只读、带来源 | 否 |
 
 `create_payment_authorization_session` 与 `confirm_payment_authorization` 不暴露给 LLM；仅 LangGraph 在确定性预检通过后调用。这样 tool-calling prompt 被攻击或模型输出错误时，也无法越过 Benefit Lock。
 
@@ -77,7 +84,26 @@ DRAFT → OPTIONS_EVALUATED → USER_AUTHORIZED → BENEFIT_LOCKED
 1. `purchase_authorization`：返回合规方案列表，由用户选择一个方案并绑定最大现金金额；
 2. `payment_authentication`：绑定 payment session、支付方式和金额。
 
-客户端通过 `POST /api/v1/agent/runs/:id/resume` 恢复。支付动作必须同时匹配 `runId + actionId + paymentSessionId`；过期动作将 transaction 设为 `EXPIRED` 并关闭锁。当前 Sandbox provider redirect 是可操作的 `/sandbox/payment-auth/...` 页面，成功或失败都会消费当前 action；失败会把 transaction 设为 `CANCELLED`、关闭锁并清除 pending execution。支付页通过 `BroadcastChannel` 通知主页面，2.5 秒轮询作为降级。当前使用内存 `MemorySaver`；服务重启后 run 无法恢复。真实 provider 必须使用持久 checkpointer/数据库，并由验签 webhook 恢复图，而不是相信浏览器自行声称“认证成功”。
+客户端通过 `POST /api/v1/agent/runs/:id/resume` 恢复。支付动作必须同时匹配 `runId + actionId + paymentSessionId`；过期动作将 transaction 设为 `EXPIRED` 并关闭锁。Agent run、交易、支付认证会话和 LangGraph checkpoint 共用 SQLite，因此两次人工确认都可跨服务重启恢复。真实 provider 仍必须由验签 webhook 恢复图，而不是相信浏览器自行声称“认证成功”。
+
+## RAG 与经验记忆边界
+
+SQLite 保存来源化知识文档、chunk 与可选 embedding。默认使用 FTS5 加词法匹配；显式配置 embedding provider 后，缺失向量会分批建立并持久化，查询采用词法与 cosine 排名融合。Embedding 服务失败会降级为词法检索。模型可用检索结果回答目录、权益、安全和支付政策问题，但检索文本不能进入金额、资格、Benefit Lock 或付款判定。
+
+每个终态 run 经过独立 `reflect` 节点，写入结构化 episode：结果、原因码、证据摘要和经验。episode 带 verified/candidate/rejected 质量状态、召回次数和用户反馈；`unhelpful` 会阻止后续召回。episode 只允许影响澄清策略、工具路由和解释；禁止影响价格、预算、资格、授权和资金动作。它不是模型自动改规则或在线训练。
+
+## 售后状态机
+
+售后与购买图分离，通过 `/api/v1/after-sales/cases` 创建：
+
+```text
+REQUESTED → ELIGIBILITY_CHECKED
+  ├─ refund / cancel_order → USER_CONFIRMATION_REQUIRED → REFUND_PENDING → REFUNDED
+  ├─ return / exchange → MANUAL_REVIEW
+  └─ outside policy window → REJECTED
+```
+
+退款确认使用独立、一次性、会过期的 action。沙箱退款会更新 payment/order 状态、恢复积分证据，并追加 transaction audit 与 service-case audit；模型没有退款工具。
 
 ## 支付顺序与 TOCTOU 防护
 
@@ -139,6 +165,6 @@ hash[n] = SHA256(hash[n-1] + serialized(event[n] without hash))
 
 ## Hackathon 与生产分界
 
-当前适合现场演示：固定 SKU、内存 run、静态规则、sandbox redirect、手动 resume。
+当前适合现场演示：固定 SKU、SQLite 持久化、来源化本地知识、结构化反思记忆、静态规则和 sandbox 支付/退款。
 
-真实部署前至少需要：持久 LangGraph checkpointer、数据库事务与唯一约束、密钥管理、OAuth/API 签名、payment webhook 验签、幂等/重试、超时补偿、报价可信导入、身份 provider 同意与数据保留策略、可观测性和外部审计锚点。
+真实部署前至少需要：托管数据库与租户隔离、密钥管理、OAuth/API 签名、payment/refund webhook 验签、幂等/重试、超时补偿、报价可信导入、商户售后适配器、身份 provider 同意与数据保留策略、可观测性和外部审计锚点。

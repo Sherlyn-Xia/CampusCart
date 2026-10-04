@@ -33,6 +33,10 @@ export async function handleAgentApi({ request, response, url, runtime, sendJson
     sendJson(response, 200, await runtime.message(runId, await bodyOf(request)));
     return true;
   }
+  if (request.method === "POST" && parts[5] === "feedback") {
+    sendJson(response, 200, runtime.feedback(runId, await bodyOf(request)));
+    return true;
+  }
   if (request.method === "GET" && parts[5] === "events") {
     const run = runtime.getRun(runId);
     response.writeHead(200, {

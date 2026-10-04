@@ -3,9 +3,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { publicRun } from "./contracts.js";
 
 export class AgentRunStore {
-  constructor({ clock = () => new Date() } = {}) {
+  constructor({ clock = () => new Date(), repository = null } = {}) {
     this.clock = clock;
-    this.runs = new Map();
+    this.repository = repository;
+    this.runs = new Map((repository?.all() ?? []).map((run) => [run.id, run]));
     this.events = new EventEmitter();
     this.events.setMaxListeners(100);
   }
@@ -51,6 +52,13 @@ export class AgentRunStore {
   update(id, patch) {
     const run = this.require(id);
     Object.assign(run, structuredClone(patch), { updatedAt: this.now() });
+    this.save(id);
+    return run;
+  }
+
+  save(id) {
+    const run = this.require(id);
+    this.repository?.save(run);
     return run;
   }
 
@@ -68,6 +76,7 @@ export class AgentRunStore {
     event.hash = createHash("sha256").update(previousHash + JSON.stringify(event)).digest("hex");
     run.trace.push(event);
     run.updatedAt = event.at;
+    this.save(id);
     this.events.emit(`trace:${id}`, event);
     return event;
   }

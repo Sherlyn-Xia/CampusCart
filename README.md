@@ -130,11 +130,14 @@ PORT=3100 npm start
 
 With no configuration the agent runs in `langgraph_deterministic_fallback` mode. To use a real LLM, copy `.env.example` to `.env`, add your own key and restart (see [Environment variables](#6-environment-variables)).
 
+Agent runs, LangGraph checkpoints, transactions, payment sessions, knowledge documents, reflection memories and after-sales cases persist in `data/campuscart.sqlite` by default. Pending confirmations can resume after a server restart.
+
 ```bash
 npm test             # rules, transaction state machine, agent graph, HTTP contract, STOP-before-payment
 npm run demo         # deterministic success and blocked scenarios in the terminal
 npm run demo:agent   # natural language, tool trace, authorization, outcome
 npm run demo:audits  # regenerate the sample audit files in docs/demo-audits/
+npm run knowledge:ingest -- path/to/documents.json  # add source-attributed RAG documents
 npm run smoke:llm    # needs OPENAI_API_KEY; makes one real model call and stops before authorization
 ```
 
@@ -149,8 +152,13 @@ Copy [`.env.example`](.env.example) to `.env`. The real `.env` is git-ignored: *
 | `OPENAI_API_KEY` | No | empty | Enables LLM tool calling (`langchain_llm_tools`). Empty means deterministic fallback. |
 | `OPENAI_BASE_URL` | No | `api.openai.com` | Base URL of any OpenAI-compatible provider (for example `https://api.deepseek.com`). |
 | `CAMPUSCART_AGENT_MODEL` | No | see `.env.example` | Model name sent to the provider (for example `deepseek-chat`). |
+| `CAMPUSCART_EMBEDDING_MODEL` | No | empty | Enables persistent hybrid vector + FTS5 retrieval when the provider supports embeddings. |
+| `CAMPUSCART_EMBEDDING_API_KEY` | No | `OPENAI_API_KEY` | Optional separate key for the embedding provider. |
+| `CAMPUSCART_EMBEDDING_BASE_URL` | No | `OPENAI_BASE_URL` | Optional separate OpenAI-compatible embedding endpoint. |
+| `CAMPUSCART_EMBEDDING_DIMENSIONS` | No | provider default | Optional positive integer dimension for compatible embedding models. |
 | `PORT` | No | `3000` | HTTP port. |
 | `HOST` | No | `127.0.0.1` | Bind address. |
+| `CAMPUSCART_DB_PATH` | No | `data/campuscart.sqlite` | SQLite database for Agent state, RAG knowledge, reflection memory and after-sales cases. |
 | `CORS_ORIGIN` | No | unset | Allow one other origin to call the API, for a separately served front end. |
 
 If the model call fails (wrong key, region block, timeout) the run records a `model_invocation_failed` trace event and falls back to the deterministic workflow, with `agentMode: langgraph_fallback_after_model_error`. It never lets the model pay.
@@ -158,7 +166,8 @@ If the model call fails (wrong key, region block, timeout) the run records a `mo
 ## 7. Tech stack
 
 - **Runtime:** Node.js 22, ES modules, the built-in `node:http` server and `node:test`
-- **Agent:** LangChain (`createAgent`, tool calling) and LangGraph (`StateGraph`, `interrupt`, `MemorySaver`)
+- **Agent:** LangChain (`createAgent`, tool calling) and LangGraph (`StateGraph`, `interrupt`, persistent `SqliteSaver`)
+- **Persistence and retrieval:** SQLite, FTS5 + lexical retrieval with optional persistent OpenAI-compatible vectors, persistent checkpoints and quality-gated reflection episodes
 - **LLM access:** `@langchain/openai` (`ChatOpenAI`), compatible with OpenAI-style endpoints such as DeepSeek
 - **Validation:** Zod schemas for the API and tool contracts
 - **Domain:** a hand-written deterministic rule engine, transaction state machine and SHA-256 hash-chained audit log, with no framework
@@ -173,7 +182,7 @@ If the model call fails (wrong key, region block, timeout) the run records a `mo
 1. `purchase_authorization`: the user picks one plan. The approval binds the SKU, merchant, offer versions, payment method, points and a **maximum cash amount**.
 2. `payment_authentication`: after the checks pass, the user confirms the payment separately. This step is bound to `runId + actionId + paymentSessionId`, is single use, and expires.
 
-**The LLM cannot pay.** The model only gets read-only and evaluation tools (catalog, quotes, student status, rule evaluation, payment-method listing, decision inspection). Tools that authorize, create a lock or confirm a payment are **not exposed to it**. Only the LangGraph workflow calls them, after a human action. A prompt injection or a bad model answer cannot reach the money path, and a failed or missing model response falls back to the deterministic graph.
+**The LLM cannot pay.** The model only gets read-only and evaluation tools (catalog, quotes, student status, rule evaluation, payment-method listing, decision inspection and cited knowledge retrieval). Tools that authorize, create a lock, confirm a payment or issue a refund are **not exposed to it**. Only a controlled workflow calls them after a human action. A prompt injection, retrieved document or bad model answer cannot reach the money path, and a failed or missing model response falls back to the deterministic graph.
 
 **Deterministic code decides ALLOW / STOP.** Budgets and prices are integer cents. The rule engine and the Benefit Lock decide, and these checks run twice, before the payment session is created and again at completion:
 
@@ -186,7 +195,11 @@ If the model call fails (wrong key, region block, timeout) the run records a `mo
 
 **Orders and payments are Sandbox / Mock.** Tap & Go and Campus Wallet are local mocks. Credit card, WeChat Pay, AlipayHK/Alipay and Octopus are `future_integration` contracts that fail explicitly if executed. The payment page in this demo simulates the provider callback in the browser; a real integration must redirect to the provider and resume the graph from a signature-verified webhook, never from a browser claim.
 
-**Auditability.** The agent trace and the transaction audit are two independent forward hash chains (`hash[n] = SHA256(hash[n-1] + event[n])`). They detect changes to a saved copy but are **not** third-party notarization.
+**Auditability.** The agent trace, transaction audit and after-sales case audit use forward hash chains (`hash[n] = SHA256(hash[n-1] + event[n])`). They detect changes to a saved copy but are **not** third-party notarization.
+
+**RAG and reflection are advisory.** Knowledge retrieval returns source identifiers. It uses local FTS5 by default and adds persistent vector ranking only when a separate embedding model is explicitly configured. Reflection episodes have a verified/rejected quality gate, usage counters and feedback records; they may improve clarification, tool routing and explanations, but are explicitly prohibited from changing prices, budgets, eligibility, authorization scope or payment execution.
+
+**After-sales is separately authorized.** Natural-language requests can enter through `POST /api/v1/after-sales/requests`. `cancel_order` and `refund` create a one-time confirmation before the sandbox refund changes the order. `return` and `exchange` route to manual review because the demo has no delivery-inspection adapter. See `GET /api/v1/after-sales/capabilities` and the OpenAPI contract.
 
 **Other hygiene.** The legacy transaction API is retired (HTTP 410) so there is no side door around human authorization. Request bodies are size-limited and malformed JSON returns 400. The front end HTML-escapes backend-supplied strings. `.env` is git-ignored and no key is stored in the repository.
 
@@ -196,7 +209,8 @@ If the model call fails (wrong key, region block, timeout) the run records a `mo
 
 - **Controlled SKU.** The current demo uses a controlled SKU (one iPad, 128GB Wi-Fi, silver, quantity 1) to validate the transaction architecture. Production deployment will connect the same workflow to a dynamic catalog adapter. Until then, requests for other quantities, storage sizes, models or colours stop for clarification instead of being substituted.
 - **Mock providers.** Merchants, identity, offers and payments are synthetic. Prices, offers and student rules are not live data and imply no partnership.
-- **In-memory runs.** LangGraph uses `MemorySaver`, so a server restart loses runs and unpaid orders become invalid.
+- **Local persistence only.** SQLite makes local runs recoverable, but production still needs managed database availability, access control, backups, encryption and retention jobs.
+- **Small-corpus vector search.** Embeddings are persisted in SQLite and cosine ranking runs in-process. This is suitable for the demo knowledge set; a large production corpus should use pgvector, Qdrant or another managed vector index with tenant filters.
 - **Fallback intent parsing.** Without an LLM, budget, points, quantity and payment preferences are read by a small set of text rules. With an LLM, tools and explanations are model-assisted, but all decisions remain deterministic.
 - **LLM mode coverage.** `langchain_llm_tools` was exercised against an OpenAI-compatible endpoint (DeepSeek). The test suite also uses a local protocol stub, which is an integration regression and not a real model call.
 - **No delivery-deadline support**, and the Benefits page is read-only demo data.
@@ -204,9 +218,10 @@ If the model call fails (wrong key, region block, timeout) the run records a `mo
 **Next steps**
 
 - Add a dynamic catalog and merchant adapter with trusted quote ingestion (adapter identity, signed or versioned quotes, expiry, normalized offers)
-- Persistent LangGraph checkpointer and a database with transaction constraints
+- Move the local SQLite persistence layer to a managed transactional database and add authentication/tenant isolation
 - Real payment provider integration with redirect or SDK token, verified webhooks, idempotency, pre-authorization and capture, and reconciliation
 - Authentication and consent for real student verification, plus data-retention policy
+- Authenticated operator roles for memory feedback and manual after-sales review
 - Quantity and multi-item support once per-unit offer rules are defined (for example whether the student discount applies per unit)
 - Observability, external timestamping for the audit chains, and a legal and privacy review before any real launch
 
@@ -216,7 +231,10 @@ If the model call fails (wrong key, region block, timeout) the run records a `mo
 public/            front end (api.js is the only file that calls the backend)
 src/server.js      HTTP server and static files
 src/agent/         API handlers, LangGraph runtime, LangChain coordinator and tools, mock adapters
+src/after-sales/   post-purchase service-case state machine and API
+src/knowledge/     seeded source-attributed knowledge for local RAG
 src/domain/        rule engine, transaction state machine, audit hash chain, seed data
+src/persistence/   SQLite schema, repositories and LangGraph checkpoint wiring
 tests/             node:test suites
 scripts/           terminal demos, audit export, live LLM smoke test
 docs/              OpenAPI contract, workflow diagram, screenshots, sample audits

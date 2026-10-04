@@ -3,3 +3,7 @@ node_modules/
 coverage/
 *.log
 .env
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CampusCart Agent API
-  version: 1.0.0
+  version: 1.2.0
   description: >-
     Frontend-independent contract for the Hackathon sandbox. All bundled merchant,
     identity and payment adapters use synthetic data. No real funds move.
@@ -89,9 +89,10 @@ paths:
     post:
       summary: Ask a grounded question about this run
       description: >-
-        With an LLM configured, the model can only inspect authoritative run facts
-        through a read-only tool. Without a key, deterministic answers cover the
-        chosen plan and recorded block reason.
+        With an LLM configured, the model can inspect authoritative run facts and
+        retrieve cited CampusCart knowledge through read-only tools. Retrieved text
+        cannot override deterministic checkout rules. Without a key, deterministic
+        answers cover the chosen plan, recorded block reason and matching knowledge.
       requestBody:
         required: true
         content:
@@ -107,6 +108,38 @@ paths:
       responses:
         "200":
           description: Grounded answer and active Agent mode
+  /api/v1/agent/runs/{runId}/feedback:
+    parameters:
+      - $ref: "#/components/parameters/RunId"
+    post:
+      summary: Mark the terminal run's reflection memory as helpful or unhelpful
+      description: >-
+        Helpful feedback keeps the episode verified. Unhelpful feedback rejects the
+        episode so it is no longer recalled by later Agent runs. Feedback never changes
+        deterministic checkout or payment policy.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [rating]
+              properties:
+                rating:
+                  type: string
+                  enum: [helpful, unhelpful]
+                note:
+                  type: string
+                  minLength: 1
+                  maxLength: 1000
+      responses:
+        "200":
+          description: Updated quality-gated reflection memory and feedback history
+        "404":
+          description: Run or reflection memory not found
+        "409":
+          description: Run has not reached a terminal state
   /api/v1/agent/runs/{runId}/trace:
     parameters:
       - $ref: "#/components/parameters/RunId"
@@ -138,6 +171,103 @@ paths:
             text/event-stream:
               schema:
                 type: string
+  /api/v1/after-sales/capabilities:
+    get:
+      summary: Inspect available sandbox after-sales actions and safety boundaries
+      responses:
+        "200":
+          description: After-sales capabilities
+  /api/v1/after-sales/cases:
+    get:
+      summary: List after-sales cases, optionally filtered by runId or orderId
+      parameters:
+        - name: runId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: orderId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Matching service cases
+    post:
+      summary: Create an after-sales case for a completed Agent order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAfterSalesCase"
+      responses:
+        "201":
+          description: Case awaiting confirmation, rejected by policy, or routed to manual review
+        "409":
+          description: The order is not serviceable or was already refunded
+        "422":
+          $ref: "#/components/responses/InvalidRequest"
+  /api/v1/after-sales/requests:
+    post:
+      summary: Start an after-sales case from natural-language intent
+      description: >-
+        Parses cancel-order, refund, return or exchange intent, then creates the
+        same policy-checked service case. Refund-capable actions still require the
+        separate one-time confirmation returned as pendingAction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [runId, message]
+              properties:
+                runId:
+                  type: string
+                  format: uuid
+                message:
+                  type: string
+                  minLength: 3
+                  maxLength: 1000
+                idempotencyKey:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+      responses:
+        "201":
+          description: Parsed and policy-checked after-sales case
+        "422":
+          description: Validation failure or unclear after-sales intent
+  /api/v1/after-sales/cases/{caseId}:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    get:
+      summary: Read an after-sales case and its hash-chained audit record
+      responses:
+        "200":
+          description: Current service case
+        "404":
+          description: Service case not found
+  /api/v1/after-sales/cases/{caseId}/resume:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    post:
+      summary: Approve or reject the current one-time after-sales confirmation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResumeAfterSalesCase"
+      responses:
+        "200":
+          description: Updated case and simulated refund result
+        "409":
+          description: Stale or already-used action
+        "410":
+          description: Confirmation expired
 components:
   parameters:
     RunId:
@@ -147,6 +277,12 @@ components:
       schema:
         type: string
         format: uuid
+    CaseId:
+      name: caseId
+      in: path
+      required: true
+      schema:
+        type: string
   responses:
     InvalidRequest:
       description: Zod validation failure
@@ -276,6 +412,35 @@ components:
             type: object
             required: [sequence, type, at, previousHash, hash]
             additionalProperties: true
+    CreateAfterSalesCase:
+      type: object
+      additionalProperties: false
+      required: [runId, requestedAction, reason]
+      properties:
+        runId:
+          type: string
+          format: uuid
+        requestedAction:
+          type: string
+          enum: [cancel_order, refund, return, exchange]
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 1000
+        idempotencyKey:
+          type: string
+          minLength: 1
+          maxLength: 200
+    ResumeAfterSalesCase:
+      type: object
+      additionalProperties: false
+      required: [actionId, decision]
+      properties:
+        actionId:
+          type: string
+        decision:
+          type: string
+          enum: [approve, reject]
     Error:
       type: object
       required: [error]

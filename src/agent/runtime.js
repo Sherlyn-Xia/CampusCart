@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Command, END, MemorySaver, START, StateGraph, StateSchema, interrupt } from "@langchain/langgraph";
 import * as z from "zod";
-import { AgentMessageRequestSchema, AgentRunRequestSchema, ResumeRequestSchema } from "./contracts.js";
+import { AgentFeedbackRequestSchema, AgentMessageRequestSchema, AgentRunRequestSchema, ResumeRequestSchema } from "./contracts.js";
 import { AgentCoordinator } from "./coordinator.js";
 import { AgentRunStore } from "./run-store.js";
 import { AdapterRegistry } from "./adapters/registry.js";
@@ -24,17 +24,21 @@ const AgentState = new StateSchema({
 });
 
 export class AgentRuntime {
-  constructor({ transactionService, store, adapters, forceFallback = false } = {}) {
+  constructor({ transactionService, store, adapters, checkpointer = null, knowledgeBase = null, experienceMemory = null, forceFallback = false } = {}) {
     this.transactionService = transactionService;
     this.store = store ?? new AgentRunStore();
     this.adapters = adapters ?? new AdapterRegistry();
+    this.knowledgeBase = knowledgeBase;
+    this.experienceMemory = experienceMemory;
     this.coordinator = new AgentCoordinator({
       store: this.store,
       adapters: this.adapters,
       transactionService,
+      knowledgeBase,
+      experienceMemory,
       forceFallback,
     });
-    this.checkpointer = new MemorySaver();
+    this.checkpointer = checkpointer ?? new MemorySaver();
     this.graph = this.buildGraph();
   }
 
@@ -173,6 +177,29 @@ export class AgentRuntime {
       };
     };
 
+    const reflect = (state) => {
+      if (!this.experienceMemory) return {};
+      try {
+        const run = this.store.require(state.runId);
+        const transaction = run.transactionSessionId
+          ? this.transactionService.snapshot(run.transactionSessionId)
+          : null;
+        const episode = this.experienceMemory.record({ run, transaction });
+        if (episode) {
+          this.store.append(state.runId, "reflection_memory_recorded", {
+            memoryId: episode.id,
+            outcomeType: episode.outcomeType,
+            reasonCodes: episode.reasonCodes,
+            evidenceDigest: episode.evidenceDigest,
+          });
+        }
+      } catch (error) {
+        // Reflection is advisory and must never turn a completed transaction into a failure.
+        this.store.append(state.runId, "reflection_memory_failed", { error: error.message });
+      }
+      return {};
+    };
+
     return new StateGraph(AgentState)
       .addNode("discovery", discovery)
       .addNode("wait_for_authorization", waitForAuthorization)
@@ -182,6 +209,7 @@ export class AgentRuntime {
       .addNode("complete_payment", completePayment)
       .addNode("cancel", cancel)
       .addNode("finish", finish)
+      .addNode("reflect", reflect)
       .addEdge(START, "discovery")
       .addConditionalEdges("discovery", (state) => state.noExecutablePlan || state.needsClarification ? "finish" : "authorize", {
         finish: "finish",
@@ -202,7 +230,8 @@ export class AgentRuntime {
       })
       .addEdge("complete_payment", "finish")
       .addEdge("cancel", "finish")
-      .addEdge("finish", END)
+      .addEdge("finish", "reflect")
+      .addEdge("reflect", END)
       .compile({ checkpointer: this.checkpointer });
   }
 
@@ -334,7 +363,35 @@ export class AgentRuntime {
     run.messages.push({ role: "user", content: request.message, at: this.store.now() });
     run.messages.push({ role: "assistant", content: answer, at: this.store.now() });
     run.updatedAt = this.store.now();
+    this.store.save(runId);
     return { runId, message: run.messages.at(-1), agentMode: run.agentMode };
+  }
+
+  feedback(runId, input) {
+    const request = AgentFeedbackRequestSchema.parse(input);
+    const run = this.store.require(runId);
+    if (!["completed", "blocked", "cancelled", "expired", "needs_clarification"].includes(run.status)) {
+      const error = new Error("Feedback can be recorded only after the Agent run reaches a terminal state");
+      error.statusCode = 409;
+      error.code = "RUN_NOT_READY_FOR_FEEDBACK";
+      throw error;
+    }
+    const memory = this.experienceMemory?.recordFeedback(runId, request);
+    if (!memory) {
+      const error = new Error("No reflection memory exists for this Agent run");
+      error.statusCode = 404;
+      error.code = "REFLECTION_MEMORY_NOT_FOUND";
+      throw error;
+    }
+    this.store.append(runId, "reflection_feedback_recorded", {
+      rating: request.rating,
+      memoryId: memory.id,
+      qualityStatus: memory.quality.status,
+    });
+    return {
+      runId,
+      memory: this.experienceMemory.getForRun(runId),
+    };
   }
 
   getRun(id) {
@@ -361,6 +418,8 @@ export class AgentRuntime {
       agentMode: this.coordinator.mode(),
       modelConfigured: this.coordinator.hasModel(),
       model: this.coordinator.hasModel() ? process.env.CAMPUSCART_AGENT_MODEL ?? "gpt-6-astra" : null,
+      knowledge: this.knowledgeBase?.capabilities() ?? { enabled: false },
+      experienceMemory: this.experienceMemory?.capabilities() ?? { enabled: false },
       adapters: this.adapters.capabilities(),
       warnings: [
         "All bundled adapters are sandbox implementations.",

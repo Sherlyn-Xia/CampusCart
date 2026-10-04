@@ -2,9 +2,18 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { handleAfterSalesApi } from "./after-sales/api.js";
+import { AfterSalesService } from "./after-sales/service.js";
 import { TransactionService } from "./domain/transaction-service.js";
 import { AgentRuntime } from "./agent/runtime.js";
+import { AgentRunStore } from "./agent/run-store.js";
+import { AdapterRegistry } from "./agent/adapters/registry.js";
+import { MockPaymentAdapter } from "./agent/adapters/mock-payment.js";
+import { ExperienceMemory } from "./agent/experience-memory.js";
 import { agentApiError, handleAgentApi } from "./agent/api.js";
+import { KnowledgeBase } from "./knowledge/knowledge-base.js";
+import { createEmbeddingProviderFromEnv } from "./knowledge/embedding-provider.js";
+import { openSqlitePersistence } from "./persistence/sqlite.js";
 
 const publicDirectory = fileURLToPath(new URL("../public/", import.meta.url));
 
@@ -42,8 +51,9 @@ async function bodyOf(request) {
   }
 }
 
-async function api(request, response, url, { service, agentRuntime }) {
+async function api(request, response, url, { service, agentRuntime, afterSalesService }) {
   if (await handleAgentApi({ request, response, url, runtime: agentRuntime, sendJson, bodyOf })) return;
+  if (await handleAfterSalesApi({ request, response, url, service: afterSalesService, sendJson, bodyOf })) return;
   if (request.method === "GET" && url.pathname === "/api/bootstrap") return sendJson(response, 200, service.getBootstrap());
   if (url.pathname === "/api/sessions" || url.pathname.startsWith("/api/sessions/")) {
     return sendJson(response, 410, {
@@ -74,8 +84,28 @@ async function staticFile(response, pathname) {
   }
 }
 
-export function createCampusCartServer({ service = new TransactionService(), agentRuntime = null } = {}) {
-  const runtime = agentRuntime ?? new AgentRuntime({ transactionService: service });
+export function createCampusCartServer({ service = null, agentRuntime = null, persistence = null } = {}) {
+  const transactionService = service ?? new TransactionService({ repository: persistence?.transactions });
+  const knowledgeBase = persistence ? new KnowledgeBase({
+    repository: persistence.knowledge,
+    embeddingProvider: createEmbeddingProviderFromEnv(),
+  }) : null;
+  const experienceMemory = persistence ? new ExperienceMemory({ repository: persistence.memories }) : null;
+  const afterSalesService = new AfterSalesService({
+    transactionService,
+    repository: persistence?.afterSales,
+    knowledgeBase,
+  });
+  const runtime = agentRuntime ?? new AgentRuntime({
+    transactionService,
+    store: persistence ? new AgentRunStore({ repository: persistence.runs }) : undefined,
+    adapters: persistence ? new AdapterRegistry({
+      payment: new MockPaymentAdapter({ repository: persistence.paymentAuthorizations }),
+    }) : undefined,
+    checkpointer: persistence?.checkpointer,
+    knowledgeBase,
+    experienceMemory,
+  });
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
@@ -91,7 +121,11 @@ export function createCampusCartServer({ service = new TransactionService(), age
           return;
         }
       }
-      if (url.pathname.startsWith("/api/")) return await api(request, response, url, { service, agentRuntime: runtime });
+      if (url.pathname.startsWith("/api/")) return await api(request, response, url, {
+        service: transactionService,
+        agentRuntime: runtime,
+        afterSalesService,
+      });
       if (url.pathname.startsWith("/sandbox/payment-auth/")) return await staticFile(response, "/payment-auth.html");
       return await staticFile(response, url.pathname);
     } catch (error) {
@@ -99,16 +133,27 @@ export function createCampusCartServer({ service = new TransactionService(), age
       sendJson(response, formatted.statusCode, { error: formatted.message, code: formatted.code, issues: formatted.issues });
     }
   });
-  return { agentRuntime: runtime, server, service };
+  return { afterSalesService, agentRuntime: runtime, experienceMemory, knowledgeBase, persistence, server, service: transactionService };
 }
 
-const { agentRuntime, server, service } = createCampusCartServer();
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+const defaultPersistence = isMain
+  ? openSqlitePersistence({ databasePath: process.env.CAMPUSCART_DB_PATH || "data/campuscart.sqlite" })
+  : null;
+const { agentRuntime, server, service } = createCampusCartServer({ persistence: defaultPersistence });
+if (isMain) {
   const port = Number(process.env.PORT || 3000);
   const host = process.env.HOST || "127.0.0.1";
   server.listen(port, host, () => {
     console.log(`CampusCart sandbox is running at http://${host}:${server.address().port}`);
+    console.log(`Persistent Agent state: ${defaultPersistence.databasePath}`);
   });
+  const shutdown = () => server.close(() => {
+    defaultPersistence.close();
+    process.exit(0);
+  });
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
 }
 
 export { agentRuntime, server, service };
