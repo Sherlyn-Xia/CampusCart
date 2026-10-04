@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CampusCart Agent API
-  version: 1.2.0
+  version: 1.3.0
   description: >-
     Frontend-independent contract for the Hackathon sandbox. All bundled merchant,
     identity and payment adapters use synthetic data. No real funds move.
@@ -268,7 +268,120 @@ paths:
           description: Stale or already-used action
         "410":
           description: Confirmation expired
+  /api/v1/operator/after-sales/cases:
+    get:
+      summary: List service cases for authenticated manual review
+      security:
+        - OperatorBearer: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: runId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: orderId
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Matching cases plus the authenticated operator principal
+        "401":
+          description: Missing or invalid operator Bearer token
+        "503":
+          description: CAMPUSCART_OPERATOR_API_KEY is not configured
+  /api/v1/operator/after-sales/cases/{caseId}:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    get:
+      summary: Read one service case as an authenticated operator
+      security:
+        - OperatorBearer: []
+      responses:
+        "200":
+          description: Service case and authenticated operator principal
+        "401":
+          description: Missing or invalid operator Bearer token
+        "404":
+          description: Service case not found
+        "503":
+          description: Operator authentication is not configured
+  /api/v1/operator/after-sales/cases/{caseId}/review:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    post:
+      summary: Approve or reject a return or exchange in MANUAL_REVIEW
+      security:
+        - OperatorBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperatorReview"
+      responses:
+        "200":
+          description: RETURN_AUTHORIZED, EXCHANGE_AUTHORIZED, or REVIEW_REJECTED case
+        "401":
+          description: Missing or invalid operator Bearer token
+        "409":
+          description: State precondition failed or idempotency key was reused with another payload
+        "503":
+          description: Operator authentication is not configured
+  /api/v1/operator/after-sales/cases/{caseId}/receive-return:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    post:
+      summary: Record receipt of an authorized return and issue its sandbox refund
+      security:
+        - OperatorBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperatorIdempotentAction"
+      responses:
+        "200":
+          description: REFUNDED case with transaction and audit evidence
+        "401":
+          description: Missing or invalid operator Bearer token
+        "409":
+          description: State precondition failed or idempotency conflict
+        "503":
+          description: Operator authentication is not configured
+  /api/v1/operator/after-sales/cases/{caseId}/complete-exchange:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    post:
+      summary: Create sandbox replacement evidence for an authorized exchange
+      security:
+        - OperatorBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteExchange"
+      responses:
+        "200":
+          description: COMPLETED exchange case and replacement-order evidence
+        "401":
+          description: Missing or invalid operator Bearer token
+        "409":
+          description: State precondition failed or idempotency conflict
+        "503":
+          description: Operator authentication is not configured
 components:
+  securitySchemes:
+    OperatorBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: CampusCart operator API key
   parameters:
     RunId:
       name: runId
@@ -441,6 +554,52 @@ components:
         decision:
           type: string
           enum: [approve, reject]
+    OperatorReview:
+      type: object
+      additionalProperties: false
+      required: [decision, idempotencyKey]
+      properties:
+        decision:
+          type: string
+          enum: [approve, reject]
+        note:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 200
+    OperatorIdempotentAction:
+      type: object
+      additionalProperties: false
+      required: [idempotencyKey]
+      properties:
+        note:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 200
+    CompleteExchange:
+      type: object
+      additionalProperties: false
+      required: [idempotencyKey]
+      properties:
+        replacementOrderId:
+          type: string
+          minLength: 1
+          maxLength: 200
+        note:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 200
     Error:
       type: object
       required: [error]

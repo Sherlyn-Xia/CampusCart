@@ -22,6 +22,7 @@ flowchart LR
   PA -->|verified sandbox receipt| TX
   TX --> DONE[Completed outcome]
   DONE --> AS[After-sales State Machine]
+  OP[Authenticated Operator API] --> AS
   AS --> REF[Refunded outcome]
   LG --> RM[(Structured Reflection Memory)]
   LG & TX & PA & AS & KB & RM --> DB[(SQLite Persistence)]
@@ -58,7 +59,8 @@ DRAFT → OPTIONS_EVALUATED → USER_AUTHORIZED → BENEFIT_LOCKED
       ↘ NEEDS_CLARIFICATION
       ↘ CANCELLED
       ↘ EXPIRED
-COMPLETED → REFUNDED [separate after-sales confirmation]
+COMPLETED → REFUNDED [separate after-sales confirmation or received return]
+COMPLETED → exchanged_sandbox [operator-approved replacement evidence]
 ```
 
 两者不应合并。即使未来更换 Agent framework 或模型，交易状态机仍是唯一资金动作权威。
@@ -99,11 +101,16 @@ SQLite 保存来源化知识文档、chunk 与可选 embedding。默认使用 FT
 ```text
 REQUESTED → ELIGIBILITY_CHECKED
   ├─ refund / cancel_order → USER_CONFIRMATION_REQUIRED → REFUND_PENDING → REFUNDED
-  ├─ return / exchange → MANUAL_REVIEW
+  ├─ return → MANUAL_REVIEW
+  │            ├─ reject → REVIEW_REJECTED
+  │            └─ approve → RETURN_AUTHORIZED → RETURN_RECEIVED → REFUNDED
+  ├─ exchange → MANUAL_REVIEW
+  │              ├─ reject → REVIEW_REJECTED
+  │              └─ approve → EXCHANGE_AUTHORIZED → COMPLETED
   └─ outside policy window → REJECTED
 ```
 
-退款确认使用独立、一次性、会过期的 action。沙箱退款会更新 payment/order 状态、恢复积分证据，并追加 transaction audit 与 service-case audit；模型没有退款工具。
+退款确认使用独立、一次性、会过期的 action。人工审核通过独立 `/api/v1/operator/*` 路由执行；未配置 `CAMPUSCART_OPERATOR_API_KEY` 时路由关闭并返回 503，错误密钥返回 401。Bearer token 使用固定长度 SHA-256 digest 做常量时间比较。后台写操作需要幂等键和合法前置状态，审核者 ID、角色和结果写入 service-case hash chain。沙箱退款会更新 payment/order 状态、恢复积分证据，并追加 transaction audit 与 service-case audit；模型没有退款或 operator 工具。
 
 ## 支付顺序与 TOCTOU 防护
 

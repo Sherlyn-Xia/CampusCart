@@ -50,7 +50,7 @@ Orders are stored in the browser under the key `campuscart-agent-en-v1` (separat
 6. **Follow-up answers**: with `OPENAI_API_KEY` set, the agent's answer is used; otherwise the front end explains from the backend plan data.
 7. **Orders**: summaries stay in the browser, while full records, Agent runs, payment sessions and LangGraph checkpoints persist in backend SQLite. Pending confirmations can resume after a backend restart.
 
-The persistence, RAG knowledge, reflection memory and after-sales APIs are backend-only additions. Existing front-end requests and responses are unchanged. The current UI has no after-sales button; API clients can use `/api/v1/after-sales/cases` until a future UI exposes it.
+The persistence, RAG knowledge, reflection memory and after-sales APIs are backend-only additions. Existing front-end requests and responses are unchanged. The current UI has no after-sales button; customer API clients can use `/api/v1/after-sales/cases` until a future UI exposes it. Manual return/exchange decisions use the separate `/api/v1/operator/*` API with a server-side Bearer key; that credential must never be placed in `public/`, browser storage or Agent context.
 
 ## Split deployment (e.g. your own Vite front end)
 

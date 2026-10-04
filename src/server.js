@@ -13,6 +13,8 @@ import { ExperienceMemory } from "./agent/experience-memory.js";
 import { agentApiError, handleAgentApi } from "./agent/api.js";
 import { KnowledgeBase } from "./knowledge/knowledge-base.js";
 import { createEmbeddingProviderFromEnv } from "./knowledge/embedding-provider.js";
+import { createOperatorAuthenticator } from "./operator/auth.js";
+import { handleOperatorApi } from "./operator/api.js";
 import { openSqlitePersistence } from "./persistence/sqlite.js";
 
 const publicDirectory = fileURLToPath(new URL("../public/", import.meta.url));
@@ -51,9 +53,18 @@ async function bodyOf(request) {
   }
 }
 
-async function api(request, response, url, { service, agentRuntime, afterSalesService }) {
+async function api(request, response, url, { service, agentRuntime, afterSalesService, operatorAuthenticator }) {
   if (await handleAgentApi({ request, response, url, runtime: agentRuntime, sendJson, bodyOf })) return;
   if (await handleAfterSalesApi({ request, response, url, service: afterSalesService, sendJson, bodyOf })) return;
+  if (await handleOperatorApi({
+    request,
+    response,
+    url,
+    service: afterSalesService,
+    authenticator: operatorAuthenticator,
+    sendJson,
+    bodyOf,
+  })) return;
   if (request.method === "GET" && url.pathname === "/api/bootstrap") return sendJson(response, 200, service.getBootstrap());
   if (url.pathname === "/api/sessions" || url.pathname.startsWith("/api/sessions/")) {
     return sendJson(response, 410, {
@@ -84,7 +95,12 @@ async function staticFile(response, pathname) {
   }
 }
 
-export function createCampusCartServer({ service = null, agentRuntime = null, persistence = null } = {}) {
+export function createCampusCartServer({
+  service = null,
+  agentRuntime = null,
+  persistence = null,
+  operatorAuthenticator = null,
+} = {}) {
   const transactionService = service ?? new TransactionService({ repository: persistence?.transactions });
   const knowledgeBase = persistence ? new KnowledgeBase({
     repository: persistence.knowledge,
@@ -96,6 +112,7 @@ export function createCampusCartServer({ service = null, agentRuntime = null, pe
     repository: persistence?.afterSales,
     knowledgeBase,
   });
+  const operatorAuth = operatorAuthenticator ?? createOperatorAuthenticator();
   const runtime = agentRuntime ?? new AgentRuntime({
     transactionService,
     store: persistence ? new AgentRunStore({ repository: persistence.runs }) : undefined,
@@ -112,7 +129,7 @@ export function createCampusCartServer({ service = null, agentRuntime = null, pe
       // 前后端分开部署时：设置环境变量 CORS_ORIGIN（例如 http://localhost:5173）即可允许该前端跨域调用 API
       if (process.env.CORS_ORIGIN && url.pathname.startsWith("/api/")) {
         response.setHeader("access-control-allow-origin", process.env.CORS_ORIGIN);
-        response.setHeader("access-control-allow-headers", "content-type");
+        response.setHeader("access-control-allow-headers", "authorization, content-type");
         response.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
         response.setHeader("vary", "origin");
         if (request.method === "OPTIONS") {
@@ -125,6 +142,7 @@ export function createCampusCartServer({ service = null, agentRuntime = null, pe
         service: transactionService,
         agentRuntime: runtime,
         afterSalesService,
+        operatorAuthenticator: operatorAuth,
       });
       if (url.pathname.startsWith("/sandbox/payment-auth/")) return await staticFile(response, "/payment-auth.html");
       return await staticFile(response, url.pathname);
@@ -133,7 +151,16 @@ export function createCampusCartServer({ service = null, agentRuntime = null, pe
       sendJson(response, formatted.statusCode, { error: formatted.message, code: formatted.code, issues: formatted.issues });
     }
   });
-  return { afterSalesService, agentRuntime: runtime, experienceMemory, knowledgeBase, persistence, server, service: transactionService };
+  return {
+    afterSalesService,
+    agentRuntime: runtime,
+    experienceMemory,
+    knowledgeBase,
+    operatorAuthenticator: operatorAuth,
+    persistence,
+    server,
+    service: transactionService,
+  };
 }
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);

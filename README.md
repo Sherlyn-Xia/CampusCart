@@ -159,6 +159,8 @@ Copy [`.env.example`](.env.example) to `.env`. The real `.env` is git-ignored: *
 | `PORT` | No | `3000` | HTTP port. |
 | `HOST` | No | `127.0.0.1` | Bind address. |
 | `CAMPUSCART_DB_PATH` | No | `data/campuscart.sqlite` | SQLite database for Agent state, RAG knowledge, reflection memory and after-sales cases. |
+| `CAMPUSCART_OPERATOR_API_KEY` | For operator API | empty (API disabled) | Bearer key for the isolated manual after-sales API. Use a long random secret. |
+| `CAMPUSCART_OPERATOR_ID` | No | `sandbox-operator` | Stable reviewer identity written into the operator audit trail. |
 | `CORS_ORIGIN` | No | unset | Allow one other origin to call the API, for a separately served front end. |
 
 If the model call fails (wrong key, region block, timeout) the run records a `model_invocation_failed` trace event and falls back to the deterministic workflow, with `agentMode: langgraph_fallback_after_model_error`. It never lets the model pay.
@@ -199,7 +201,7 @@ If the model call fails (wrong key, region block, timeout) the run records a `mo
 
 **RAG and reflection are advisory.** Knowledge retrieval returns source identifiers. It uses local FTS5 by default and adds persistent vector ranking only when a separate embedding model is explicitly configured. Reflection episodes have a verified/rejected quality gate, usage counters and feedback records; they may improve clarification, tool routing and explanations, but are explicitly prohibited from changing prices, budgets, eligibility, authorization scope or payment execution.
 
-**After-sales is separately authorized.** Natural-language requests can enter through `POST /api/v1/after-sales/requests`. `cancel_order` and `refund` create a one-time confirmation before the sandbox refund changes the order. `return` and `exchange` route to manual review because the demo has no delivery-inspection adapter. See `GET /api/v1/after-sales/capabilities` and the OpenAPI contract.
+**After-sales is separately authorized.** Natural-language requests can enter through `POST /api/v1/after-sales/requests`. `cancel_order` and `refund` create a one-time user confirmation before the sandbox refund changes the order. `return` and `exchange` enter `MANUAL_REVIEW`. They can advance only through the isolated `/api/v1/operator/*` routes, protected by `CAMPUSCART_OPERATOR_API_KEY`; the key and operator tools are never exposed to the shopping Agent. Operator mutations require idempotency keys, enforce state preconditions, and record reviewer identity in the service-case audit. Returns refund only after receipt; exchanges create a sandbox replacement record without refunding the original payment. See `GET /api/v1/after-sales/capabilities` and the OpenAPI contract.
 
 **Other hygiene.** The legacy transaction API is retired (HTTP 410) so there is no side door around human authorization. Request bodies are size-limited and malformed JSON returns 400. The front end HTML-escapes backend-supplied strings. `.env` is git-ignored and no key is stored in the repository.
 
@@ -221,7 +223,7 @@ If the model call fails (wrong key, region block, timeout) the run records a `mo
 - Move the local SQLite persistence layer to a managed transactional database and add authentication/tenant isolation
 - Real payment provider integration with redirect or SDK token, verified webhooks, idempotency, pre-authorization and capture, and reconciliation
 - Authentication and consent for real student verification, plus data-retention policy
-- Authenticated operator roles for memory feedback and manual after-sales review
+- Replace the shared sandbox operator key with per-user OIDC/RBAC, key rotation and a production review console
 - Quantity and multi-item support once per-unit offer rules are defined (for example whether the student discount applies per unit)
 - Observability, external timestamping for the audit chains, and a legal and privacy review before any real launch
 
@@ -232,6 +234,7 @@ public/            front end (api.js is the only file that calls the backend)
 src/server.js      HTTP server and static files
 src/agent/         API handlers, LangGraph runtime, LangChain coordinator and tools, mock adapters
 src/after-sales/   post-purchase service-case state machine and API
+src/operator/      isolated operator authentication and manual-review API
 src/knowledge/     seeded source-attributed knowledge for local RAG
 src/domain/        rule engine, transaction state machine, audit hash chain, seed data
 src/persistence/   SQLite schema, repositories and LangGraph checkpoint wiring

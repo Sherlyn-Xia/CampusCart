@@ -63,18 +63,10 @@ test("after-sales refund requires confirmation, survives restart and reverses th
 
   let environment = openEnvironment(databasePath);
   const run = await completePurchase(environment.runtime);
-  const manualReview = environment.afterSales.createCase({
-    runId: run.id,
-    requestedAction: "return",
-    reason: "The delivered item would need inspection",
-    idempotencyKey: "return-review-1",
-  });
-  assert.equal(manualReview.status, "MANUAL_REVIEW");
-  assert.equal(manualReview.outcome.reason.code, "MERCHANT_REVIEW_REQUIRED");
-
+  const reason = "请为这个沙箱订单申请退款，我下单后反悔了";
   const serviceCase = await environment.afterSales.createCaseFromMessage({
     runId: run.id,
-    message: "请为这个沙箱订单申请退款，我下单后反悔了",
+    message: reason,
     idempotencyKey: "refund-request-1",
   });
   assert.equal(serviceCase.status, "USER_CONFIRMATION_REQUIRED");
@@ -83,8 +75,8 @@ test("after-sales refund requires confirmation, survives restart and reverses th
   assert.equal(serviceCase.auditChainValid, true);
   assert.equal(environment.afterSales.createCase({
     runId: run.id,
-    requestedAction: "refund",
-    reason: "Idempotent replay",
+    requestedAction: "cancel_order",
+    reason,
     idempotencyKey: "refund-request-1",
   }).id, serviceCase.id);
   assert.throws(() => environment.afterSales.createCase({

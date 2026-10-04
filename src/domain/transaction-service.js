@@ -544,6 +544,62 @@ export class TransactionService {
     return this.commit(session);
   }
 
+  recordExchange(id, { caseId, replacementOrderId = null, reason }) {
+    const session = this.requireSession(id);
+    const existing = session.afterSales?.find((entry) => entry.caseId === caseId);
+    if (existing) {
+      if (existing.type === "exchange") return this.snapshot(session);
+      const error = new Error("This service case already recorded another after-sales outcome");
+      error.statusCode = 409;
+      error.code = "AFTER_SALES_OUTCOME_CONFLICT";
+      throw error;
+    }
+    this.requireState(session, ["COMPLETED"]);
+    if (!session.order || session.order.status !== "accepted_sandbox" || session.outcome?.type !== "success") {
+      const error = new Error("Only an accepted completed order can be exchanged");
+      error.statusCode = 409;
+      error.code = "ORDER_NOT_EXCHANGEABLE";
+      throw error;
+    }
+    if (session.afterSales?.some((entry) => entry.type === "exchange")) {
+      const error = new Error("This order has already been exchanged");
+      error.statusCode = 409;
+      error.code = "ORDER_ALREADY_EXCHANGED";
+      throw error;
+    }
+
+    const completedAt = this.now();
+    const exchange = {
+      id: `exchange_result_demo_${randomUUID().slice(0, 8)}`,
+      type: "exchange",
+      caseId,
+      status: "replacement_created_sandbox",
+      replacementOrderId: replacementOrderId ?? `order_replacement_demo_${randomUUID().slice(0, 8)}`,
+      reason,
+      completedAt,
+      disclaimer: "Simulated exchange. No item will be shipped.",
+    };
+    appendAudit(session, "exchange_replacement_created", {
+      caseId,
+      exchangeId: exchange.id,
+      replacementOrderId: exchange.replacementOrderId,
+      idempotencyKey: `exchange-${caseId}`,
+    }, completedAt);
+    session.order = {
+      ...session.order,
+      status: "exchanged_sandbox",
+      replacementOrderId: exchange.replacementOrderId,
+      updatedAt: completedAt,
+    };
+    session.afterSales = [...(session.afterSales ?? []), exchange];
+    appendAudit(session, "order_status_changed", {
+      orderId: session.order.id,
+      status: session.order.status,
+      replacementOrderId: exchange.replacementOrderId,
+    }, completedAt);
+    return this.commit(session);
+  }
+
   execute(id) {
     const session = this.requireSession(id);
     if (session.channel === "agent") {
