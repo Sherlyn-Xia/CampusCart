@@ -1,6 +1,6 @@
 # CampusCart
 
-> **Live demo / demo video:** _add your link here before submitting_
+> **Demo video:** [Watch CampusCart on YouTube](https://youtu.be/Zsuv6p5m_U4)
 
 > CampusCart is a policy-controlled shopping agent that turns purchase intent into an auditable, user-authorized checkout.
 
