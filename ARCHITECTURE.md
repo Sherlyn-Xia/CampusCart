@@ -113,6 +113,8 @@ REQUESTED → ELIGIBILITY_CHECKED
   └─ outside policy window → REJECTED
 ```
 
+客户前端只使用 `/api/v1/after-sales/*`：已完成订单可创建 case、执行退款类的一次性确认、读取状态和审计进度。它不包含 Operator Key，也不能批准退货、确认收货或创建 replacement。`/operator` 控制台使用独立鉴权路由完成这些后台动作。
+
 退款确认使用独立、一次性、会过期的 action。人工审核通过独立 `/api/v1/operator/*` 路由执行；未配置 `CAMPUSCART_OPERATOR_API_KEY` 时路由关闭并返回 503，错误密钥返回 401。Bearer token 使用固定长度 SHA-256 digest 做常量时间比较。后台写操作需要幂等键和合法前置状态，审核者 ID、角色和结果写入 service-case hash chain。同一 case 的异步写操作在进程内串行化，避免并发审核重复调用 provider。
 
 `PaymentRefundAdapter` 与 `MerchantAfterSalesAdapter` 是独立于购物 Agent 的可注入 async 边界。默认 sandbox 实现分别生成确定性的退款、RMA、收货和 replacement 回执；服务会校验 provider、order、case、金额与 idempotency key，再允许交易核心改变 payment/order。回执写入 case outcome、transaction afterSales 证据和 hash-chain audit。adapter 抛错或回执不匹配时，case 转入 `MANUAL_REVIEW`，已支付交易保持不变。只有最新 provider failure 为 `refund` 的 case 才能通过 operator API 重试，且继续使用 `refund-{caseId}` provider 幂等键。模型没有这些 adapter、退款或 operator 工具。

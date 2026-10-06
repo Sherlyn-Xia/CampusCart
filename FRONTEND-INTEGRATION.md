@@ -50,7 +50,9 @@ Orders are stored in the browser under the key `campuscart-agent-en-v1` (separat
 6. **Follow-up answers**: with `OPENAI_API_KEY` set, the agent's answer is used; otherwise the front end explains from the backend plan data.
 7. **Orders**: summaries stay in the browser, while full records, Agent runs, payment sessions and LangGraph checkpoints persist in backend SQLite. Pending confirmations can resume after a backend restart.
 
-The customer shopping UI and its API responses remain unchanged. It still has no after-sales button; customer API clients can use `/api/v1/after-sales/cases` until a future customer-facing flow exposes it. A separate operator console now lives at `/operator` (`public/operator.html`, `operator.css`, `operator.js`). It calls only `/api/v1/operator/*` for case review, return receipt, exchange completion and failed-refund reconciliation. Its Bearer key is entered at runtime and held only in tab memory—never hard-coded, placed in the URL, written to browser storage or exposed to Agent context. Production should replace this shared-key login with individual OIDC/RBAC sessions.
+Completed orders now expose **After-sales service** in the customer Order History. The customer can choose cancellation/refund, return or exchange, add a reason, resolve the separate refund confirmation, refresh the case, and read its progress/audit timeline. The browser persists only the public case snapshot with the local order summary; it calls `/api/v1/after-sales/*` and never calls an operator route or receives an operator credential.
+
+A separate operator console lives at `/operator` (`public/operator.html`, `operator.css`, `operator.js`). It calls only `/api/v1/operator/*` for case review, return receipt, exchange completion and failed-refund reconciliation. Its Bearer key is entered at runtime and held only in tab memory—never hard-coded, placed in the URL, written to browser storage or exposed to Agent context. Production should replace this shared-key login with individual OIDC/RBAC sessions.
 
 ## Split deployment (e.g. your own Vite front end)
 

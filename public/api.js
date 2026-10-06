@@ -52,7 +52,14 @@ window.CampusAPI = (() => {
   ACTION_EXPIRED:'This confirmation has expired. The transaction was closed safely.',
   ACTION_NOT_CURRENT:'This confirmation was already handled or is no longer valid.',
   PAYMENT_ACTION_BINDING_MISMATCH:'The payment session doesn’t match this transaction and was rejected.',
-  PLAN_NOT_AVAILABLE:'The selected plan is no longer available. Please compare again.'
+  PLAN_NOT_AVAILABLE:'The selected plan is no longer available. Please compare again.',
+  ORDER_NOT_FOUND:'The completed order could not be found for this request.',
+  ORDER_ALREADY_REFUNDED:'This order has already been refunded.',
+  ORDER_NOT_SERVICEABLE:'This order is not eligible for another after-sales request.',
+  AFTER_SALES_CASE_ALREADY_OPEN:'This order already has an active after-sales request.',
+  AFTER_SALES_ACTION_NOT_CURRENT:'This confirmation was already handled or is no longer current.',
+  AFTER_SALES_ACTION_EXPIRED:'This after-sales confirmation has expired.',
+  IDEMPOTENCY_KEY_REUSED:'This request key was already used for different details.'
  };
  function enReason(r){
   let m;
@@ -102,7 +109,11 @@ window.CampusAPI = (() => {
   approve: (id, actionId, planId) => request(`/api/v1/agent/runs/${enc(id)}/resume`, {method:'POST', body:{actionId, decision:'approve', planId}}),
   reject: (id, actionId) => request(`/api/v1/agent/runs/${enc(id)}/resume`, {method:'POST', body:{actionId, decision:'reject'}}),
   authenticate: (id, actionId, paymentSessionId) => request(`/api/v1/agent/runs/${enc(id)}/resume`, {method:'POST', body:{actionId, decision:'authenticated', paymentSessionId}}),
-  failPayment: (id, actionId, paymentSessionId) => request(`/api/v1/agent/runs/${enc(id)}/resume`, {method:'POST', body:{actionId, decision:'failed', paymentSessionId}})
+  failPayment: (id, actionId, paymentSessionId) => request(`/api/v1/agent/runs/${enc(id)}/resume`, {method:'POST', body:{actionId, decision:'failed', paymentSessionId}}),
+  afterSalesCases: runId => request(`/api/v1/after-sales/cases?runId=${enc(runId)}`),
+  afterSalesCase: caseId => request(`/api/v1/after-sales/cases/${enc(caseId)}`),
+  createAfterSales: (runId, requestedAction, reason, idempotencyKey) => request('/api/v1/after-sales/cases', {method:'POST', body:{runId, requestedAction, reason, idempotencyKey}}),
+  resumeAfterSales: (caseId, actionId, decision) => request(`/api/v1/after-sales/cases/${enc(caseId)}/resume`, {method:'POST', body:{actionId, decision}})
  };
 
  /* ---------- Backend data -> UI data ---------- */

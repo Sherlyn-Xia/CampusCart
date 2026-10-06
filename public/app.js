@@ -14,6 +14,7 @@ const clock=iso=>new Date(iso).toLocaleTimeString('en-US',{hour:'numeric',minute
 const shortId=o=>'CC-'+o.id.slice(0,8).toUpperCase();
 const PAY_LABELS={'wechat-pay':'WeChat Pay','credit-card':'Credit card','alipay-hk':'AlipayHK','octopus':'Octopus','mock-tap-go':'Tap & Go','mock-campus-wallet':'Campus Wallet'};
 const GONE='The server can’t find this transaction (it may have restarted). The authorization is no longer valid and nothing was paid.';
+const SERVICE_LABELS={USER_CONFIRMATION_REQUIRED:'Confirmation required',REFUND_PENDING:'Refund processing',MANUAL_REVIEW:'Under review',RETURN_AUTHORIZED:'Return authorized',RETURN_RECEIVED:'Return received',EXCHANGE_AUTHORIZED:'Exchange authorized',REFUNDED:'Refunded',COMPLETED:'Exchange completed',REVIEW_REJECTED:'Request rejected',REJECTED:'Not eligible',CANCELLED:'Request cancelled',EXPIRED:'Confirmation expired'};
 
 let saved;try{saved=JSON.parse(localStorage.getItem(KEY)||'null')}catch{}
 const state={orders:Array.isArray(saved?.orders)?saved.orders:[],meta:null,caps:null,bootError:null,query:'Help me buy this iPad, budget HK$3,600, up to 100 points.',cap:360000,pointCap:100,filter:'all',run:null,chat:[],loading:false};
@@ -96,7 +97,13 @@ function benefits(){const m=state.meta,u=m.user,ok=studentOk();
  return `<section class="page benefits-page"><div class="eyebrow">MY BENEFITS</div><h1>Use your benefits where they count.</h1><p class="subtitle">Comparisons only consider the status, points and payment methods you already have.</p><div class="benefit-layout"><div class="identity-card"><div class="identity-top"><h2>Student status</h2>${icon('shield')}</div><div><p>Hong Kong university student · ${esc(u.displayName)} (demo account)</p><div class="identity-bottom"><strong>${ok?'Student status enabled':'Student status not enabled'}</strong><span style="border:1px solid #ffffff66;background:#ffffff1c;border-radius:9px;padding:7px 12px;font-size:13px">Provided by the Agent identity service</span></div></div></div><div class="points-card"><span class="section-label">CAMPUS WALLET POINTS</span><div class="points-number">${u.pointsBalance}<small>points available</small></div><p>You decide the most to use; each plan shows the actual usage.</p><p class="small-note">${pointsNote}</p></div></div><div class="rights-bottom"><section class="panel"><h2>My offers</h2>${coupons}</section><section class="panel"><h2>Payment methods</h2>${wallets}<hr class="divider"><p class="muted" style="font-size:14px">The payment method is set by the chosen plan and can’t change after authorization.</p></section></div><p class="rights-foot">Status, points, offers and payment methods come from the Agent service’s demo data (read-only). No student ID, bank card or real identity details are needed.</p></section>`}
 
 function statusLabel(o){return ({completed:'Completed',pending:'Awaiting payment',failed:'Payment failed',cancelled:'Cancelled',expired:'Expired'})[o.status]||'Stopped'}
-function orders(){const list=state.orders.filter(o=>state.filter==='all'||(state.filter==='stopped'?['blocked','cancelled','expired'].includes(o.status):o.status===state.filter));return `<section class="page orders-page"><div class="eyebrow">YOUR ORDERS</div><h1>Every purchase, on record.</h1><p class="subtitle">See your purchase results, or continue or cancel orders that haven’t been paid.</p><div class="order-filters" role="group" aria-label="Order filter">${[['all','All'],['pending','To pay'],['completed','Completed'],['failed','Failed'],['stopped','Stopped']].map(([k,t])=>`<button data-filter="${k}" class="${state.filter===k?'active':''}">${t}</button>`).join('')}</div>${list.length?list.map(o=>`<article class="order-item"><div class="order-topline"><span>${shortDate(new Date(o.createdAt).toISOString())} · ${shortId(o)}</span><span class="pill ${o.status==='completed'?'green':o.status==='pending'?'':o.status==='failed'?'red':'gray'}">${statusLabel(o)}</span></div><div class="order-body"><img src="assets/ipad.jpg" alt="Silver iPad A16"><div class="order-info"><h3>${E.PRODUCT.name} · ${E.PRODUCT.spec}</h3><p>${esc(o.plan.name)} · ${esc(o.plan.paymentName)}</p></div><div class="order-money">${money(o.plan.amount)}<p>${o.status==='completed'?'Simulated payment':o.status==='failed'?'Payment not taken':'Not paid yet'}</p></div></div><div class="order-actions">${o.status==='pending'?`<button class="text-button" data-cancel="${o.id}">Cancel authorization</button><button class="text-button" data-go="payment/${o.id}">Continue to payment</button>`:`<button class="text-button" data-go="result/${o.id}">View details</button><button class="text-button" data-download="${o.id}">Download purchase record</button>`}</div></article>`).join(''):`<div class="empty">${icon('receipt')}<h2>${state.filter==='all'?'No purchase records yet':'No orders here yet'}</h2><p>${state.filter==='all'?'Start with a purchase goal and find a plan that suits you.':'Try a different filter.'}</p><button class="primary" data-go="shop">Go shopping</button></div>`}</section>`}
+function serviceLabel(c){return SERVICE_LABELS[c?.status]||'After-sales request'}
+function serviceTone(c){return ['REFUNDED','COMPLETED'].includes(c?.status)?'green':['REVIEW_REJECTED','REJECTED','CANCELLED','EXPIRED'].includes(c?.status)?'red':''}
+function orderActions(o){
+ if(o.status==='pending')return `<button class="text-button" data-cancel="${o.id}">Cancel authorization</button><button class="text-button" data-go="payment/${o.id}">Continue to payment</button>`;
+ return `<button class="text-button" data-go="result/${o.id}">View details</button>${o.status==='completed'?`<button class="text-button service-link" data-service="${o.id}">${o.afterSales?'View after-sales':'After-sales service'}</button>`:''}<button class="text-button" data-download="${o.id}">Download purchase record</button>`;
+}
+function orders(){const list=state.orders.filter(o=>state.filter==='all'||(state.filter==='stopped'?['blocked','cancelled','expired'].includes(o.status):o.status===state.filter));return `<section class="page orders-page"><div class="eyebrow">YOUR ORDERS</div><h1>Every purchase, on record.</h1><p class="subtitle">See purchase results and request a refund, return or exchange for completed orders.</p><div class="order-filters" role="group" aria-label="Order filter">${[['all','All'],['pending','To pay'],['completed','Completed'],['failed','Failed'],['stopped','Stopped']].map(([k,t])=>`<button data-filter="${k}" class="${state.filter===k?'active':''}">${t}</button>`).join('')}</div>${list.length?list.map(o=>`<article class="order-item"><div class="order-topline"><span>${shortDate(new Date(o.createdAt).toISOString())} · ${shortId(o)}</span><span class="order-statuses"><span class="pill ${o.status==='completed'?'green':o.status==='pending'?'':o.status==='failed'?'red':'gray'}">${statusLabel(o)}</span>${o.afterSales?`<span class="pill ${serviceTone(o.afterSales)}">${esc(serviceLabel(o.afterSales))}</span>`:''}</span></div><div class="order-body"><img src="assets/ipad.jpg" alt="Silver iPad A16"><div class="order-info"><h3>${E.PRODUCT.name} · ${E.PRODUCT.spec}</h3><p>${esc(o.plan.name)} · ${esc(o.plan.paymentName)}</p></div><div class="order-money">${money(o.plan.amount)}<p>${o.afterSales?.status==='REFUNDED'?'Refunded in sandbox':o.status==='completed'?'Simulated payment':o.status==='failed'?'Payment not taken':'Not paid yet'}</p></div></div><div class="order-actions">${orderActions(o)}</div></article>`).join(''):`<div class="empty">${icon('receipt')}<h2>${state.filter==='all'?'No purchase records yet':'No orders here yet'}</h2><p>${state.filter==='all'?'Start with a purchase goal and find a plan that suits you.':'Try a different filter.'}</p><button class="primary" data-go="shop">Go shopping</button></div>`}</section>`}
 
 function payment(o){if(o.status!=='pending')return result(o);
  const until=Math.min(...[o.payment?.expiresAt,o.lock?.expiresAt].filter(Boolean).map(Date.parse));
@@ -105,7 +112,25 @@ function payment(o){if(o.status!=='pending')return result(o);
 function result(o){const ok=o.status==='completed';
  const title=ok?'Purchase complete.':o.status==='failed'?'Payment failed.':o.status==='cancelled'?'This purchase was cancelled.':o.status==='expired'?'This purchase has expired.':'This purchase was stopped for you.';
  const auth=ok?'Used, can’t be paid again':o.status==='failed'?'Closed, authorize again':o.status==='cancelled'?'Cancelled':o.status==='expired'?'Expired':'Stopped, authorize again';
- return `<section class="page result-page"><div class="status-icon ${ok?'':'blocked'}">${icon(ok?'check':'shield')}</div><h1>${title}</h1><p class="subtitle">${ok?'The simulated order is confirmed. No real charge or shipment.':esc(o.reason||'No payment was made for this order.')}</p><div class="result-amount"><small>HK$</small>${ok?(o.plan.amount/100).toLocaleString('en-HK'):'0'}</div><p class="muted" style="font-size:13px">${ok?'Simulated payment amount':'Payment amount'}</p><div class="receipt"><div class="bill-line"><span>Product</span><strong>${E.PRODUCT.name} · ${E.PRODUCT.spec}</strong></div><div class="bill-line"><span>Merchant</span><strong>${esc(o.plan.name)}</strong></div><div class="bill-line"><span>Payment method</span><strong>${esc(o.plan.paymentName)} Sandbox</strong></div><div class="bill-line"><span>Points used</span><strong>${ok?o.plan.points:0} pts</strong></div>${ok?`<div class="bill-line"><span>Fulfillment</span><strong>${esc(o.plan.fulfillment)}</strong></div>${o.sandboxOrderId?`<div class="bill-line"><span>Simulated order ID</span><strong>${esc(o.sandboxOrderId)}</strong></div>`:''}`:''}<div class="bill-line"><span>Purchase authorization</span><strong>${auth}</strong></div></div><div class="result-buttons"><button class="primary" data-go="${ok?'orders':'shop'}">${ok?'View order history':o.status==='failed'?'Try again':'Adjust purchase request'}</button><button class="secondary" data-go="${ok?'shop':'orders'}">${ok?'Keep shopping':'View order history'}</button></div><div class="result-links"><button class="text-button" data-download="${o.id}">Download purchase record</button>${ok?'<button class="text-button" data-action="receipt-info">About this record</button>':''}</div></section>`}
+ return `<section class="page result-page"><div class="status-icon ${ok?'':'blocked'}">${icon(ok?'check':'shield')}</div><h1>${title}</h1><p class="subtitle">${ok?'The simulated order is confirmed. No real charge or shipment.':esc(o.reason||'No payment was made for this order.')}</p><div class="result-amount"><small>HK$</small>${ok?(o.plan.amount/100).toLocaleString('en-HK'):'0'}</div><p class="muted" style="font-size:13px">${ok?'Simulated payment amount':'Payment amount'}</p><div class="receipt"><div class="bill-line"><span>Product</span><strong>${E.PRODUCT.name} · ${E.PRODUCT.spec}</strong></div><div class="bill-line"><span>Merchant</span><strong>${esc(o.plan.name)}</strong></div><div class="bill-line"><span>Payment method</span><strong>${esc(o.plan.paymentName)} Sandbox</strong></div><div class="bill-line"><span>Points used</span><strong>${ok?o.plan.points:0} pts</strong></div>${ok?`<div class="bill-line"><span>Fulfillment</span><strong>${esc(o.plan.fulfillment)}</strong></div>${o.sandboxOrderId?`<div class="bill-line"><span>Simulated order ID</span><strong>${esc(o.sandboxOrderId)}</strong></div>`:''}`:''}<div class="bill-line"><span>Purchase authorization</span><strong>${auth}</strong></div>${o.afterSales?`<div class="bill-line"><span>After-sales</span><strong>${esc(serviceLabel(o.afterSales))}</strong></div>`:''}</div><div class="result-buttons"><button class="primary" data-go="${ok?'orders':'shop'}">${ok?'View order history':o.status==='failed'?'Try again':'Adjust purchase request'}</button><button class="secondary" data-go="${ok?'shop':'orders'}">${ok?'Keep shopping':'View order history'}</button></div><div class="result-links"><button class="text-button" data-download="${o.id}">Download purchase record</button>${ok?`<button class="text-button" data-service="${o.id}">${o.afterSales?'View after-sales':'Request after-sales'}</button><button class="text-button" data-action="receipt-info">About this record</button>`:''}</div></section>`}
+
+function serviceOutcome(c){
+ if(c.status==='USER_CONFIRMATION_REQUIRED')return 'Review the amount below and confirm this request. The confirmation is single-use and expires.';
+ if(c.status==='MANUAL_REVIEW')return c.outcome?.reason?.code==='MERCHANT_REVIEW_REQUIRED'?'The merchant team will review this request. No refund or replacement is issued until the required checks finish.':'This request needs an operator to resolve a provider result.';
+ if(c.status==='RETURN_AUTHORIZED')return 'Your return is authorized. In this sandbox, the operator will record the item as received before the refund is issued.';
+ if(c.status==='RETURN_RECEIVED'||c.status==='REFUND_PENDING')return 'The returned item was recorded and the refund is being processed.';
+ if(c.status==='EXCHANGE_AUTHORIZED')return 'Your exchange is authorized. The merchant operator will create the replacement order.';
+ if(c.status==='REFUNDED')return `The sandbox refund of ${money(c.outcome?.refund?.amountCents??c.refundEstimate?.amountCents??0)} is complete${c.outcome?.refund?.pointsRestored?` and ${c.outcome.refund.pointsRestored} points were restored`:''}.`;
+ if(c.status==='COMPLETED')return `The sandbox replacement order ${c.outcome?.exchange?.replacementOrderId||''} was created. No refund was issued.`;
+ return c.outcome?.reason?.message||'This after-sales request is closed.';
+}
+function serviceTimeline(c){const events=[...(c.audit||[])].reverse().slice(0,8);return `<div class="service-timeline">${events.map((e,i)=>`<div class="service-event"><span class="service-dot ${i===0?'current':''}"></span><div><strong>${esc(e.type.replaceAll('_',' '))}</strong><p>${new Date(e.at).toLocaleString('en-HK',{dateStyle:'medium',timeStyle:'short'})}</p></div></div>`).join('')}</div>`}
+function serviceForm(o){return `<form class="service-form" id="service-form" data-order-id="${o.id}"><fieldset><legend>What would you like us to do?</legend><div class="service-options">${[['cancel_order','Cancel & refund','I changed my mind after ordering.'],['refund','Refund','Refund the completed sandbox payment.'],['return','Return','Send the item back for review and refund.'],['exchange','Exchange','Request an inspected replacement item.']].map(([value,title,desc],i)=>`<label class="service-option"><input type="radio" name="service-action" value="${value}" ${i===0?'checked':''}><span>${icon(value==='exchange'?'box':'receipt')}<strong>${title}</strong><small>${desc}</small></span></label>`).join('')}</div></fieldset><label class="service-reason"><span>Tell us why</span><textarea id="service-reason" minlength="3" maxlength="1000" required placeholder="Describe what happened or why you changed your mind."></textarea></label><div id="service-error" role="alert"></div><div class="service-submit"><p>Submitting does not immediately move real money or ship an item.</p><button class="primary" type="submit" ${busy?'disabled':''}>${busy?'Submitting…':'Continue'}</button></div></form>`}
+function servicePage(o){if(o.status!=='completed')return orders();const c=o.afterSales;
+ const summary=`<aside class="service-order-card"><img src="assets/ipad.jpg" alt="Silver iPad A16"><div><span class="section-label">ORDER ${shortId(o)}</span><h2>${E.PRODUCT.name}</h2><p>${E.PRODUCT.spec} · 1 unit</p></div><hr class="divider"><div class="bill-line"><span>Merchant</span><strong>${esc(o.plan.name)}</strong></div><div class="bill-line"><span>Paid</span><strong>${money(o.plan.amount)}</strong></div><div class="bill-line"><span>Order ID</span><strong>${esc(o.sandboxOrderId||'Sandbox order')}</strong></div></aside>`;
+ if(!c)return `<section class="page service-page">${back('Back to order history','orders')}<div class="eyebrow">AFTER-SALES SERVICE</div><h1>How can we help with this order?</h1><p class="subtitle">Cancellation, refunds, returns and exchanges follow separate confirmation and review rules.</p><div class="service-layout">${summary}<section class="service-main">${serviceForm(o)}</section></div></section>`;
+ const confirmation=c.status==='USER_CONFIRMATION_REQUIRED'?`<div class="service-confirm"><div><strong>Confirm ${c.requestedAction.replaceAll('_',' ')}</strong><p>This will close the sandbox order and record a simulated refund of ${money(c.refundEstimate.amountCents)}.</p></div><div class="service-confirm-actions"><button class="secondary" data-service-decision="reject" data-order-id="${o.id}" ${busy?'disabled':''}>Keep order</button><button class="primary" data-service-decision="approve" data-order-id="${o.id}" ${busy?'disabled':''}>Confirm request</button></div></div>`:'';
+ return `<section class="page service-page">${back('Back to order history','orders')}<div class="service-page-head"><div><div class="eyebrow">AFTER-SALES SERVICE</div><h1>${esc(serviceLabel(c))}</h1><p class="subtitle">Case ${esc(c.id)}</p></div><span class="pill ${serviceTone(c)}">${esc(serviceLabel(c))}</span></div><div class="service-layout">${summary}<section class="service-main"><div class="service-status-card"><div class="status-icon ${['REVIEW_REJECTED','REJECTED','CANCELLED','EXPIRED'].includes(c.status)?'blocked':''}">${icon(['REFUNDED','COMPLETED'].includes(c.status)?'check':['RETURN_AUTHORIZED','EXCHANGE_AUTHORIZED'].includes(c.status)?'box':'shield')}</div><div><h2>${esc(serviceLabel(c))}</h2><p>${esc(serviceOutcome(c))}</p></div><button class="text-button" data-service-refresh="${o.id}" ${busy?'disabled':''}>Refresh status</button></div>${confirmation}<div class="service-facts"><div><span>Request</span><strong>${esc(c.requestedAction.replaceAll('_',' '))}</strong></div><div><span>Refund estimate</span><strong>${money(c.refundEstimate.amountCents)}</strong></div><div><span>Return window</span><strong>${c.eligibility?.withinWindow?'Eligible':'Outside window'}</strong></div><div><span>Audit chain</span><strong>${c.auditChainValid?'Verified':'Check failed'}</strong></div></div><div class="service-reason-display"><span>Your reason</span><p>${esc(c.reason)}</p></div><section class="service-progress"><div class="section-head"><h2>Case progress</h2><span>${c.audit?.length||0} events</span></div>${serviceTimeline(c)}</section></section></div></section>`}
 
 function status(html){return `<section class="page"><div class="empty">${icon('shield')}${html}</div></section>`}
 function render(preserveScroll=false){const viewport=preserveScroll?{x:window.scrollX,y:window.scrollY}:null;
@@ -113,10 +138,10 @@ function render(preserveScroll=false){const viewport=preserveScroll?{x:window.sc
  if(state.bootError)html=status(`<h2>Can’t reach the Agent service</h2><p>${esc(state.bootError)}</p><button class="primary" data-action="retry">Retry</button>`);
  else if(!state.meta)html=status('<h2>Connecting to the Agent…</h2><p>One moment.</p>');
  else{const o=state.orders.find(x=>x.id===arg);
-  if(['payment','result'].includes(route))html=o?(route==='payment'?payment(o):result(o)):orders();
+  if(['payment','result','service'].includes(route))html=o?(route==='payment'?payment(o):route==='result'?result(o):servicePage(o)):orders();
   else html=route==='benefits'?benefits():route==='orders'?orders():route==='results'?results():home()}
  $('#main').innerHTML=html;
- const nav=route==='benefits'?'benefits':['orders','result','payment'].includes(route)?'orders':'shop';
+ const nav=route==='benefits'?'benefits':['orders','result','payment','service'].includes(route)?'orders':'shop';
  document.querySelectorAll('[data-nav]').forEach(a=>{const active=a.dataset.nav===nav;a.classList.toggle('active',active);if(active)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
  document.title=(nav==='benefits'?'My Benefits':nav==='orders'?'Order History':'Shop')+' · CampusCart';
  if(preserveScroll){const pg=$('#main > .page');if(pg)pg.style.animation='none';window.scrollTo({left:viewport.x,top:viewport.y,behavior:'instant'});$('#followup')?.focus({preventScroll:true})}else{window.scrollTo({top:0,behavior:'instant'});$('#main').focus({preventScroll:true})}}
@@ -254,19 +279,70 @@ async function refreshPending(){
  if(changed){persist();render(true)}
 }
 
+/* ---------- Customer after-sales ---------- */
+function newestCase(cases){return [...cases].sort((a,b)=>Date.parse(b.updatedAt)-Date.parse(a.updatedAt))[0]||null}
+async function refreshService(o,{redraw=true}={}){
+ try{
+  const result=await API.afterSalesCases(o.id),latest=newestCase(result.cases||[]);
+  if(latest)o.afterSales=latest;
+  if(redraw){persist();render(true)}
+  return latest;
+ }catch(e){if(redraw)toast(e.message);return null}
+}
+async function refreshAfterSales(){
+ let changed=false;
+ await Promise.all(state.orders.filter(o=>o.status==='completed').map(async o=>{
+  const before=o.afterSales?.updatedAt||'';
+  const latest=await refreshService(o,{redraw:false});
+  if(latest&&latest.updatedAt!==before)changed=true;
+ }));
+ if(changed){persist();render(true)}
+}
+async function requestService(id,action,reason){
+ const o=state.orders.find(x=>x.id===id);if(!o||o.status!=='completed'||busy)return;
+ const fingerprint=JSON.stringify({action,reason});
+ if(o.afterSalesRequest?.fingerprint!==fingerprint)o.afterSalesRequest={fingerprint,idempotencyKey:`customer-ui-${crypto.randomUUID()}`};
+ persist();busy=true;render();
+ try{
+  o.afterSales=await API.createAfterSales(o.id,action,reason,o.afterSalesRequest.idempotencyKey);
+  delete o.afterSalesRequest;persist();busy=false;render();toast(action==='return'||action==='exchange'?'Request sent for merchant review':'Request created — please confirm it');
+ }catch(e){
+  const recovered=await refreshService(o,{redraw:false});
+  busy=false;if(recovered){delete o.afterSalesRequest;persist();render();toast('Existing after-sales request restored');return}
+  render();const box=$('#service-error');if(box)box.innerHTML=`<div class="error">${esc(e.message)} You can retry safely with the same request key.</div>`;
+ }
+}
+async function decideService(id,decision){
+ const o=state.orders.find(x=>x.id===id),c=o?.afterSales;if(!o||c?.status!=='USER_CONFIRMATION_REQUIRED'||busy)return;
+ busy=true;render();
+ try{o.afterSales=await API.resumeAfterSales(c.id,c.pendingAction.actionId,decision);toast(decision==='approve'?'After-sales request confirmed':'Your order was kept')}
+ catch(e){const fresh=await refreshService(o,{redraw:false});if(!fresh)toast(e.message)}
+ busy=false;persist();render();
+}
+async function refreshServiceStatus(id){
+ const o=state.orders.find(x=>x.id===id);if(!o||busy)return;
+ busy=true;render();
+ try{
+  if(o.afterSales)o.afterSales=await API.afterSalesCase(o.afterSales.id);else await refreshService(o,{redraw:false});
+  toast('After-sales status refreshed');
+ }catch(e){toast(e.message)}
+ busy=false;persist();render();
+}
+
 async function download(id){
  const o=state.orders.find(o=>o.id===id);if(!o)return;
  let snap=o.snapshot;
  try{const [run,tr,tx]=await Promise.all([API.getRun(o.id),API.trace(o.id),API.transaction(o.id)]);snap={run,trace:tr.events,transaction:tx}}catch{}
  if(!snap){toast('The server no longer has this record, so it can’t be downloaded');return}
- const payload={schema:'campuscart.agent-run.v1',exported_at:new Date().toISOString(),environment:'sandbox',disclosure:'Sandbox data only. No real identity verification, merchant order, payment or shipping. Hash chains detect modification of a saved copy but are not independent attestation.',agent_run_id:o.id,run:snap.run,agent_trace:snap.trace,transaction:snap.transaction,verification:{transaction_audit_chain_valid:snap.transaction?.auditChainValid??null,algorithm:'SHA-256'}};
+ let afterSales=o.afterSales;try{if(afterSales)afterSales=await API.afterSalesCase(afterSales.id)}catch{}
+ const payload={schema:'campuscart.agent-run.v1',exported_at:new Date().toISOString(),environment:'sandbox',disclosure:'Sandbox data only. No real identity verification, merchant order, payment or shipping. Hash chains detect modification of a saved copy but are not independent attestation.',agent_run_id:o.id,run:snap.run,agent_trace:snap.trace,transaction:snap.transaction,after_sales:afterSales||null,verification:{transaction_audit_chain_valid:snap.transaction?.auditChainValid??null,after_sales_audit_chain_valid:afterSales?.auditChainValid??null,algorithm:'SHA-256'}};
  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=shortId(o)+'-record.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Purchase record downloaded');
 }
 function about(){const mode=state.caps?.modelConfigured?`Language model connected (${esc(state.caps.model||'')}); follow-up questions are answered by the model.`:'No language model configured (OPENAI_API_KEY): the Agent uses deterministic rules, and follow-ups are answered by the front end from the backend plan data.';
  modal(`${head('CampusCart demo','Complete a purchase within your authorization.')}<p style="font-size:15px;line-height:1.9">Try shopping, comparing offers, confirming authorization and paying. Comparison, authorization, pre-checks, payment and audit are all done by the backend Agent (LangChain + LangGraph). Merchants, status, offers, payments and orders are all Sandbox data, with no real charge or shipment.</p><hr class="divider"><p class="muted" style="font-size:14px">${mode} Order summaries are kept in this browser; the full record lives in the Agent service’s memory, so orders awaiting payment become invalid after the service restarts.</p><div class="modal-actions"><button class="primary" data-action="close">Got it</button></div>`)}
 
 /* ---------- Events ---------- */
-document.addEventListener('submit',e=>{if(e.target.id==='search-form'){e.preventDefault();search()}if(e.target.id==='chat-form'){e.preventDefault();const q=$('#followup').value.trim();if(q)ask(q)}});
+document.addEventListener('submit',e=>{if(e.target.id==='search-form'){e.preventDefault();search()}if(e.target.id==='chat-form'){e.preventDefault();const q=$('#followup').value.trim();if(q)ask(q)}if(e.target.id==='service-form'){e.preventDefault();const reason=$('#service-reason').value.trim(),action=new FormData(e.target).get('service-action');if(reason.length<3){const box=$('#service-error');box.innerHTML='<div class="error">Please add at least three characters about your request.</div>';return}requestService(e.target.dataset.orderId,action,reason)}});
 document.addEventListener('input',e=>{if(e.target.id==='query'){state.query=e.target.value;const p=E.parse(state.query);if(p.cap!==undefined){state.cap=p.cap;if(p.cap)$('#budget').value=p.cap/100}if(p.points!==undefined){state.pointCap=p.points;$('#points').value=p.points}}if(e.target.id==='consent')$('#approve').disabled=!e.target.checked});
 document.addEventListener('change',e=>{const el=e.target;if(el.id==='budget'){state.cap=E.cents(el.value);syncQuery()}if(el.id==='points'){state.pointCap=Number(el.value);syncQuery()}});
 function syncQuery(){const q=$('#query');if(!q)return;q.value=state.query=applyToText(q.value,state.cap,state.pointCap)}
@@ -281,6 +357,9 @@ document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||
  if(b.dataset.pay){pay(b.dataset.pay);return}
  if(b.dataset.cancel){cancel(b.dataset.cancel);return}
  if(b.dataset.payfail){payFail(b.dataset.payfail);return}
+ if(b.dataset.service){go('service/'+b.dataset.service);return}
+ if(b.dataset.serviceDecision){decideService(b.dataset.orderId,b.dataset.serviceDecision);return}
+ if(b.dataset.serviceRefresh){refreshServiceStatus(b.dataset.serviceRefresh);return}
  if(b.dataset.download){download(b.dataset.download);return}
  if(b.dataset.action==='approve'){approve();return}
  if(b.dataset.action==='about'){about();return}
@@ -305,7 +384,7 @@ async function boot(){
  try{[state.meta,state.caps]=await Promise.all([API.bootstrap(),API.capabilities()])}
  catch(e){state.bootError=e.message}
  render();
- if(state.meta)refreshPending();
+ if(state.meta){refreshPending();refreshAfterSales()}
 }
 function retryBoot(){boot()}
 boot();
