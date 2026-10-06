@@ -51,7 +51,7 @@ export async function handleAfterSalesApi({ request, response, url, service, sen
     return true;
   }
   if (request.method === "POST" && parts[5] === "resume") {
-    sendJson(response, 200, service.resume(caseId, ResumeCaseSchema.parse(await bodyOf(request))));
+    sendJson(response, 200, await service.resume(caseId, ResumeCaseSchema.parse(await bodyOf(request))));
     return true;
   }
   return false;

@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
+import { SandboxMerchantAfterSalesAdapter } from "./adapters/merchant-after-sales.js";
+import { SandboxPaymentRefundAdapter } from "./adapters/payment-refund.js";
 
 function clone(value) {
   return structuredClone(value);
@@ -19,6 +21,19 @@ function digest(value) {
 
 function serviceError(message, statusCode, code) {
   return Object.assign(new Error(message), { statusCode, code });
+}
+
+function requireMerchantReceipt(receipt, { operation, orderId, caseId, idempotencyKey, referenceField }) {
+  if (receipt?.status !== "succeeded"
+    || receipt.operation !== operation
+    || receipt.orderId !== orderId
+    || receipt.caseId !== caseId
+    || receipt.idempotencyKey !== idempotencyKey
+    || !receipt.providerId
+    || !receipt[referenceField]) {
+    throw serviceError("Merchant provider receipt does not match the requested after-sales operation", 502, "INVALID_MERCHANT_PROVIDER_RECEIPT");
+  }
+  return receipt;
 }
 
 function appendCaseAudit(serviceCase, type, data, at) {
@@ -50,12 +65,22 @@ function verifyCaseAudit(events) {
 }
 
 export class AfterSalesService {
-  constructor({ transactionService, repository = null, knowledgeBase = null, clock = () => new Date() } = {}) {
+  constructor({
+    transactionService,
+    repository = null,
+    knowledgeBase = null,
+    paymentRefundAdapter = null,
+    merchantAfterSalesAdapter = null,
+    clock = () => new Date(),
+  } = {}) {
     this.transactionService = transactionService;
     this.repository = repository;
     this.knowledgeBase = knowledgeBase;
     this.clock = clock;
+    this.paymentRefundAdapter = paymentRefundAdapter ?? new SandboxPaymentRefundAdapter({ clock });
+    this.merchantAfterSalesAdapter = merchantAfterSalesAdapter ?? new SandboxMerchantAfterSalesAdapter({ clock });
     this.cases = new Map((repository?.all() ?? []).map((serviceCase) => [serviceCase.id, serviceCase]));
+    this.caseQueues = new Map();
   }
 
   now() {
@@ -71,6 +96,10 @@ export class AfterSalesService {
       manualReviewActions: ["return", "exchange"],
       confirmationRequired: true,
       returnWindowDays: 14,
+      adapters: {
+        paymentRefund: this.paymentRefundAdapter.capabilities(),
+        merchantAfterSales: this.merchantAfterSalesAdapter.capabilities(),
+      },
       operatorWorkflow: {
         authentication: "bearer_api_key",
         routes: "/api/v1/operator/after-sales/cases",
@@ -244,51 +273,85 @@ export class AfterSalesService {
     return this.commit(serviceCase);
   }
 
-  runOperatorOperation(serviceCase, { type, idempotencyKey, payload, operator, execute }) {
-    if (!operator?.id || operator.role !== "after_sales_operator") {
-      throw serviceError("A verified after-sales operator principal is required", 403, "OPERATOR_PRINCIPAL_REQUIRED");
+  async runCaseMutation(caseId, execute) {
+    const previous = this.caseQueues.get(caseId) ?? Promise.resolve();
+    let release;
+    const current = new Promise((resolve) => { release = resolve; });
+    this.caseQueues.set(caseId, current);
+    await previous;
+    try {
+      return await execute();
+    } finally {
+      release();
+      if (this.caseQueues.get(caseId) === current) this.caseQueues.delete(caseId);
     }
-    if (typeof idempotencyKey !== "string" || idempotencyKey.length < 8 || idempotencyKey.length > 200) {
-      throw serviceError("Operator actions require an idempotency key between 8 and 200 characters", 422, "OPERATOR_IDEMPOTENCY_KEY_REQUIRED");
-    }
-    const operations = serviceCase.operatorOperations ?? [];
-    const operationDigest = digest({ type, payload });
-    const existing = operations.find((operation) => operation.idempotencyKey === idempotencyKey);
-    if (existing) {
-      if (existing.type !== type || existing.requestDigest !== operationDigest) {
-        throw serviceError("This operator idempotency key was already used for a different action", 409, "IDEMPOTENCY_KEY_REUSED");
-      }
-      return this.snapshot(serviceCase);
-    }
-
-    execute();
-    const completedAt = this.now();
-    serviceCase.operatorOperations = [...operations, {
-      id: `operator_op_${randomUUID().slice(0, 12)}`,
-      type,
-      idempotencyKey,
-      requestDigest: operationDigest,
-      operator: clone(operator),
-      resultingStatus: serviceCase.status,
-      completedAt,
-    }];
-    appendCaseAudit(serviceCase, "operator_operation_recorded", {
-      type,
-      idempotencyKey,
-      operator: clone(operator),
-      resultingStatus: serviceCase.status,
-    }, completedAt);
-    return this.commit(serviceCase);
   }
 
-  review(id, { decision, note = null, idempotencyKey }, operator) {
-    const serviceCase = this.requireCase(id);
-    return this.runOperatorOperation(serviceCase, {
+  providerFailure(serviceCase, error, operation, receipt = null) {
+    serviceCase.status = "MANUAL_REVIEW";
+    serviceCase.outcome = {
+      type: "manual_review",
+      reason: {
+        code: error.code ?? "AFTER_SALES_PROVIDER_FAILED",
+        message: error.message,
+      },
+    };
+    appendCaseAudit(serviceCase, "after_sales_provider_failed", {
+      operation,
+      code: serviceCase.outcome.reason.code,
+      providerId: receipt?.providerId ?? null,
+      providerReference: receipt?.providerRefundId ?? receipt?.receiptId ?? receipt?.replacementOrderId ?? null,
+      routedTo: serviceCase.status,
+    }, this.now());
+  }
+
+  async runOperatorOperation(caseId, { type, idempotencyKey, payload, operator, execute }) {
+    return this.runCaseMutation(caseId, async () => {
+      const serviceCase = this.requireCase(caseId);
+      if (!operator?.id || operator.role !== "after_sales_operator") {
+        throw serviceError("A verified after-sales operator principal is required", 403, "OPERATOR_PRINCIPAL_REQUIRED");
+      }
+      if (typeof idempotencyKey !== "string" || idempotencyKey.length < 8 || idempotencyKey.length > 200) {
+        throw serviceError("Operator actions require an idempotency key between 8 and 200 characters", 422, "OPERATOR_IDEMPOTENCY_KEY_REQUIRED");
+      }
+      const operations = serviceCase.operatorOperations ?? [];
+      const operationDigest = digest({ type, payload });
+      const existing = operations.find((operation) => operation.idempotencyKey === idempotencyKey);
+      if (existing) {
+        if (existing.type !== type || existing.requestDigest !== operationDigest) {
+          throw serviceError("This operator idempotency key was already used for a different action", 409, "IDEMPOTENCY_KEY_REUSED");
+        }
+        return this.snapshot(serviceCase);
+      }
+
+      await execute(serviceCase);
+      const completedAt = this.now();
+      serviceCase.operatorOperations = [...operations, {
+        id: `operator_op_${randomUUID().slice(0, 12)}`,
+        type,
+        idempotencyKey,
+        requestDigest: operationDigest,
+        operator: clone(operator),
+        resultingStatus: serviceCase.status,
+        completedAt,
+      }];
+      appendCaseAudit(serviceCase, "operator_operation_recorded", {
+        type,
+        idempotencyKey,
+        operator: clone(operator),
+        resultingStatus: serviceCase.status,
+      }, completedAt);
+      return this.commit(serviceCase);
+    });
+  }
+
+  async review(id, { decision, note = null, idempotencyKey }, operator) {
+    return this.runOperatorOperation(id, {
       type: "manual_review",
       idempotencyKey,
       payload: { decision, note },
       operator,
-      execute: () => {
+      execute: async (serviceCase) => {
         if (serviceCase.status !== "MANUAL_REVIEW") {
           throw serviceError("This case is not awaiting manual review", 409, "AFTER_SALES_STATE_CONFLICT");
         }
@@ -314,13 +377,33 @@ export class AfterSalesService {
           return;
         }
         if (serviceCase.requestedAction === "return") {
+          let receipt;
+          try {
+            receipt = await this.merchantAfterSalesAdapter.authorizeReturn({
+              orderId: serviceCase.orderId,
+              caseId: serviceCase.id,
+              idempotencyKey: `return-authorization-${serviceCase.id}`,
+              reason: serviceCase.reason,
+            });
+            requireMerchantReceipt(receipt, {
+              operation: "authorize_return",
+              orderId: serviceCase.orderId,
+              caseId: serviceCase.id,
+              idempotencyKey: `return-authorization-${serviceCase.id}`,
+              referenceField: "authorizationId",
+            });
+          } catch (error) {
+            this.providerFailure(serviceCase, error, "authorize_return", receipt);
+            return;
+          }
           const authorizedAt = this.now();
           serviceCase.status = "RETURN_AUTHORIZED";
           serviceCase.returnAuthorization = {
-            id: `rma_demo_${randomUUID().slice(0, 8)}`,
+            id: receipt.authorizationId,
             status: "awaiting_return",
             authorizedAt,
-            disclaimer: "Sandbox return authorization. No parcel will be shipped.",
+            providerReceipt: clone(receipt),
+            disclaimer: receipt.disclaimer,
           };
           serviceCase.outcome = {
             type: "return_authorized",
@@ -328,17 +411,38 @@ export class AfterSalesService {
           };
           appendCaseAudit(serviceCase, "return_authorized", {
             returnAuthorizationId: serviceCase.returnAuthorization.id,
+            providerId: receipt.providerId,
             operator: clone(operator),
           }, authorizedAt);
+          return;
+        }
+        let receipt;
+        try {
+          receipt = await this.merchantAfterSalesAdapter.authorizeExchange({
+            orderId: serviceCase.orderId,
+            caseId: serviceCase.id,
+            idempotencyKey: `exchange-authorization-${serviceCase.id}`,
+            reason: serviceCase.reason,
+          });
+          requireMerchantReceipt(receipt, {
+            operation: "authorize_exchange",
+            orderId: serviceCase.orderId,
+            caseId: serviceCase.id,
+            idempotencyKey: `exchange-authorization-${serviceCase.id}`,
+            referenceField: "authorizationId",
+          });
+        } catch (error) {
+          this.providerFailure(serviceCase, error, "authorize_exchange", receipt);
           return;
         }
         const authorizedAt = this.now();
         serviceCase.status = "EXCHANGE_AUTHORIZED";
         serviceCase.exchangeAuthorization = {
-          id: `exchange_demo_${randomUUID().slice(0, 8)}`,
+          id: receipt.authorizationId,
           status: "awaiting_replacement",
           authorizedAt,
-          disclaimer: "Sandbox exchange authorization. No item will be shipped.",
+          providerReceipt: clone(receipt),
+          disclaimer: receipt.disclaimer,
         };
         serviceCase.outcome = {
           type: "exchange_authorized",
@@ -346,40 +450,48 @@ export class AfterSalesService {
         };
         appendCaseAudit(serviceCase, "exchange_authorized", {
           exchangeAuthorizationId: serviceCase.exchangeAuthorization.id,
+          providerId: receipt.providerId,
           operator: clone(operator),
         }, authorizedAt);
       },
     });
   }
 
-  processRefund(serviceCase, requestedAction = serviceCase.requestedAction) {
+  async processRefund(serviceCase, requestedAction = serviceCase.requestedAction) {
     serviceCase.status = "REFUND_PENDING";
     appendCaseAudit(serviceCase, "refund_processing_started", {
       amountCents: serviceCase.refundEstimate.amountCents,
       idempotencyKey: `refund-${serviceCase.id}`,
     }, this.now());
     let transaction;
+    let providerReceipt;
     try {
+      const beforeRefund = this.transactionService.snapshot(this.transactionService.requireSession(serviceCase.transactionSessionId));
+      providerReceipt = await this.paymentRefundAdapter.refund({
+        paymentId: beforeRefund.payment.id,
+        amountCents: serviceCase.refundEstimate.amountCents,
+        currency: serviceCase.refundEstimate.currency,
+        idempotencyKey: `refund-${serviceCase.id}`,
+        caseId: serviceCase.id,
+        orderId: serviceCase.orderId,
+        reason: serviceCase.reason,
+      });
+      if (providerReceipt?.status !== "succeeded") throw serviceError("Payment provider did not complete the refund", 502, "PAYMENT_REFUND_PROVIDER_FAILED");
+      appendCaseAudit(serviceCase, "refund_provider_succeeded", {
+        providerId: providerReceipt.providerId,
+        providerRefundId: providerReceipt.providerRefundId,
+        amountCents: providerReceipt.amountCents,
+        idempotencyKey: providerReceipt.idempotencyKey,
+      }, this.now());
       transaction = this.transactionService.refundCompletedOrder(serviceCase.transactionSessionId, {
         caseId: serviceCase.id,
         requestedAction,
         reason: serviceCase.reason,
+        providerReceipt,
       });
     } catch (error) {
-      serviceCase.status = error.code === "ORDER_ALREADY_REFUNDED" ? "REJECTED" : "MANUAL_REVIEW";
-      serviceCase.outcome = {
-        type: serviceCase.status === "REJECTED" ? "rejected" : "manual_review",
-        reason: {
-          code: error.code ?? "REFUND_PROCESSING_FAILED",
-          message: error.message,
-        },
-      };
-      appendCaseAudit(serviceCase, "refund_processing_failed", {
-        code: serviceCase.outcome.reason.code,
-        routedTo: serviceCase.status,
-      }, this.now());
-      this.commit(serviceCase);
-      throw error;
+      this.providerFailure(serviceCase, error, "refund", providerReceipt);
+      return this.commit(serviceCase);
     }
     const refund = transaction.afterSales.find((entry) => entry.caseId === serviceCase.id);
     serviceCase.status = "REFUNDED";
@@ -391,22 +503,43 @@ export class AfterSalesService {
     };
     appendCaseAudit(serviceCase, "refund_completed", {
       refundId: refund.id,
+      providerId: refund.providerReceipt.providerId,
+      providerRefundId: refund.providerReceipt.providerRefundId,
       amountCents: refund.amountCents,
       pointsRestored: refund.pointsRestored,
       orderStatus: transaction.order.status,
     }, this.now());
   }
 
-  receiveReturn(id, { note = null, idempotencyKey }, operator) {
-    const serviceCase = this.requireCase(id);
-    return this.runOperatorOperation(serviceCase, {
+  async receiveReturn(id, { note = null, idempotencyKey }, operator) {
+    return this.runOperatorOperation(id, {
       type: "receive_return",
       idempotencyKey,
       payload: { note },
       operator,
-      execute: () => {
+      execute: async (serviceCase) => {
         if (serviceCase.status !== "RETURN_AUTHORIZED") {
           throw serviceError("This case is not awaiting a returned item", 409, "AFTER_SALES_STATE_CONFLICT");
+        }
+        let receipt;
+        try {
+          receipt = await this.merchantAfterSalesAdapter.recordReturnReceived({
+            orderId: serviceCase.orderId,
+            caseId: serviceCase.id,
+            authorizationId: serviceCase.returnAuthorization.id,
+            idempotencyKey: `return-received-${serviceCase.id}`,
+            note,
+          });
+          requireMerchantReceipt(receipt, {
+            operation: "record_return_received",
+            orderId: serviceCase.orderId,
+            caseId: serviceCase.id,
+            idempotencyKey: `return-received-${serviceCase.id}`,
+            referenceField: "receiptId",
+          });
+        } catch (error) {
+          this.providerFailure(serviceCase, error, "record_return_received", receipt);
+          return;
         }
         const receivedAt = this.now();
         serviceCase.status = "RETURN_RECEIVED";
@@ -414,32 +547,56 @@ export class AfterSalesService {
           ...serviceCase.returnAuthorization,
           status: "received_sandbox",
           receivedAt,
+          receipt: clone(receipt),
         };
         appendCaseAudit(serviceCase, "return_received", {
           returnAuthorizationId: serviceCase.returnAuthorization.id,
+          providerId: receipt.providerId,
+          receiptId: receipt.receiptId,
           note,
           operator: clone(operator),
         }, receivedAt);
-        this.processRefund(serviceCase, "return");
+        await this.processRefund(serviceCase, "return");
       },
     });
   }
 
-  completeExchange(id, { replacementOrderId = null, note = null, idempotencyKey }, operator) {
-    const serviceCase = this.requireCase(id);
-    return this.runOperatorOperation(serviceCase, {
+  async completeExchange(id, { replacementOrderId = null, note = null, idempotencyKey }, operator) {
+    return this.runOperatorOperation(id, {
       type: "complete_exchange",
       idempotencyKey,
       payload: { replacementOrderId, note },
       operator,
-      execute: () => {
+      execute: async (serviceCase) => {
         if (serviceCase.status !== "EXCHANGE_AUTHORIZED") {
           throw serviceError("This case is not awaiting an exchange replacement", 409, "AFTER_SALES_STATE_CONFLICT");
         }
+        let merchantReceipt;
+        try {
+          merchantReceipt = await this.merchantAfterSalesAdapter.createReplacement({
+            orderId: serviceCase.orderId,
+            caseId: serviceCase.id,
+            authorizationId: serviceCase.exchangeAuthorization.id,
+            replacementOrderId,
+            idempotencyKey: `exchange-${serviceCase.id}`,
+            note,
+          });
+          requireMerchantReceipt(merchantReceipt, {
+            operation: "create_replacement",
+            orderId: serviceCase.orderId,
+            caseId: serviceCase.id,
+            idempotencyKey: `exchange-${serviceCase.id}`,
+            referenceField: "replacementOrderId",
+          });
+        } catch (error) {
+          this.providerFailure(serviceCase, error, "create_replacement", merchantReceipt);
+          return;
+        }
         const transaction = this.transactionService.recordExchange(serviceCase.transactionSessionId, {
           caseId: serviceCase.id,
-          replacementOrderId,
+          replacementOrderId: merchantReceipt.replacementOrderId,
           reason: serviceCase.reason,
+          merchantReceipt,
         });
         const exchange = transaction.afterSales.find((entry) => entry.caseId === serviceCase.id);
         serviceCase.status = "COMPLETED";
@@ -448,6 +605,7 @@ export class AfterSalesService {
           status: "replacement_created_sandbox",
           completedAt: exchange.completedAt,
           replacementOrderId: exchange.replacementOrderId,
+          merchantReceipt: clone(merchantReceipt),
         };
         serviceCase.outcome = {
           type: "exchange_completed",
@@ -457,6 +615,7 @@ export class AfterSalesService {
         appendCaseAudit(serviceCase, "exchange_completed", {
           exchangeId: exchange.id,
           replacementOrderId: exchange.replacementOrderId,
+          providerId: merchantReceipt.providerId,
           note,
           operator: clone(operator),
         }, this.now());
@@ -464,43 +623,45 @@ export class AfterSalesService {
     });
   }
 
-  resume(id, { actionId, decision }) {
-    const serviceCase = this.requireCase(id);
-    if (serviceCase.status !== "USER_CONFIRMATION_REQUIRED" || serviceCase.pendingAction?.actionId !== actionId) {
-      const error = new Error("The after-sales action is stale, already used, or belongs to another case");
-      error.statusCode = 409;
-      error.code = "AFTER_SALES_ACTION_NOT_CURRENT";
-      throw error;
-    }
-    if (this.clock().getTime() >= new Date(serviceCase.pendingAction.expiresAt).getTime()) {
-      const expiredActionId = serviceCase.pendingAction.actionId;
-      serviceCase.status = "EXPIRED";
+  async resume(id, { actionId, decision }) {
+    return this.runCaseMutation(id, async () => {
+      const serviceCase = this.requireCase(id);
+      if (serviceCase.status !== "USER_CONFIRMATION_REQUIRED" || serviceCase.pendingAction?.actionId !== actionId) {
+        const error = new Error("The after-sales action is stale, already used, or belongs to another case");
+        error.statusCode = 409;
+        error.code = "AFTER_SALES_ACTION_NOT_CURRENT";
+        throw error;
+      }
+      if (this.clock().getTime() >= new Date(serviceCase.pendingAction.expiresAt).getTime()) {
+        const expiredActionId = serviceCase.pendingAction.actionId;
+        serviceCase.status = "EXPIRED";
+        serviceCase.pendingAction = null;
+        serviceCase.outcome = {
+          type: "expired",
+          reason: { code: "AFTER_SALES_ACTION_EXPIRED", message: "The after-sales confirmation expired before it was used." },
+        };
+        appendCaseAudit(serviceCase, "after_sales_confirmation_expired", { actionId: expiredActionId }, this.now());
+        this.commit(serviceCase);
+        const error = new Error(serviceCase.outcome.reason.message);
+        error.statusCode = 410;
+        error.code = serviceCase.outcome.reason.code;
+        throw error;
+      }
+
+      appendCaseAudit(serviceCase, "after_sales_confirmation_received", { actionId, decision }, this.now());
       serviceCase.pendingAction = null;
-      serviceCase.outcome = {
-        type: "expired",
-        reason: { code: "AFTER_SALES_ACTION_EXPIRED", message: "The after-sales confirmation expired before it was used." },
-      };
-      appendCaseAudit(serviceCase, "after_sales_confirmation_expired", { actionId: expiredActionId }, this.now());
-      this.commit(serviceCase);
-      const error = new Error(serviceCase.outcome.reason.message);
-      error.statusCode = 410;
-      error.code = serviceCase.outcome.reason.code;
-      throw error;
-    }
+      if (decision === "reject") {
+        serviceCase.status = "CANCELLED";
+        serviceCase.outcome = {
+          type: "cancelled",
+          reason: { code: "USER_REJECTED_AFTER_SALES", message: "The user did not confirm the after-sales request." },
+        };
+        appendCaseAudit(serviceCase, "after_sales_cancelled", { reasonCode: serviceCase.outcome.reason.code }, this.now());
+        return this.commit(serviceCase);
+      }
 
-    appendCaseAudit(serviceCase, "after_sales_confirmation_received", { actionId, decision }, this.now());
-    serviceCase.pendingAction = null;
-    if (decision === "reject") {
-      serviceCase.status = "CANCELLED";
-      serviceCase.outcome = {
-        type: "cancelled",
-        reason: { code: "USER_REJECTED_AFTER_SALES", message: "The user did not confirm the after-sales request." },
-      };
-      appendCaseAudit(serviceCase, "after_sales_cancelled", { reasonCode: serviceCase.outcome.reason.code }, this.now());
+      await this.processRefund(serviceCase);
       return this.commit(serviceCase);
-    }
-
-    this.processRefund(serviceCase);
-    return this.commit(serviceCase);
+    });
   }
 }

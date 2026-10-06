@@ -479,7 +479,7 @@ export class TransactionService {
     return this.commit(session);
   }
 
-  refundCompletedOrder(id, { caseId, requestedAction, reason }) {
+  refundCompletedOrder(id, { caseId, requestedAction, reason, providerReceipt }) {
     const session = this.requireSession(id);
     if (session.state === "REFUNDED") {
       if (session.afterSales?.some((entry) => entry.caseId === caseId)) return this.snapshot(session);
@@ -495,10 +495,22 @@ export class TransactionService {
       error.code = "ORDER_NOT_REFUNDABLE";
       throw error;
     }
+    if (providerReceipt?.status !== "succeeded"
+      || providerReceipt.paymentId !== session.payment.id
+      || providerReceipt.amountCents !== session.payment.amountCents
+      || providerReceipt.currency !== "HKD"
+      || providerReceipt.idempotencyKey !== `refund-${caseId}`
+      || !providerReceipt.providerId
+      || !providerReceipt.providerRefundId) {
+      const error = new Error("Refund provider receipt does not match the payment and service case");
+      error.statusCode = 502;
+      error.code = "INVALID_REFUND_PROVIDER_RECEIPT";
+      throw error;
+    }
     const refundedAt = this.now();
     const finalQuote = session.outcome.finalQuote;
     const refund = {
-      id: `refund_demo_${randomUUID().slice(0, 8)}`,
+      id: providerReceipt.providerRefundId,
       caseId,
       status: "refunded_sandbox",
       amountCents: session.payment.amountCents,
@@ -506,7 +518,8 @@ export class TransactionService {
       requestedAction,
       reason,
       refundedAt,
-      disclaimer: "Simulated refund. No real funds moved.",
+      providerReceipt: clone(providerReceipt),
+      disclaimer: providerReceipt.disclaimer,
     };
     appendAudit(session, "refund_submitted", {
       caseId,
@@ -514,12 +527,15 @@ export class TransactionService {
       amountCents: refund.amountCents,
       requestedAction,
       idempotencyKey: `refund-${caseId}`,
+      providerId: providerReceipt.providerId,
+      providerRefundId: providerReceipt.providerRefundId,
     }, refundedAt);
     session.payment = {
       ...session.payment,
       status: "refunded_sandbox",
       refundedAt,
       refundId: refund.id,
+      refundProviderId: providerReceipt.providerId,
     };
     session.order = {
       ...session.order,
@@ -544,7 +560,7 @@ export class TransactionService {
     return this.commit(session);
   }
 
-  recordExchange(id, { caseId, replacementOrderId = null, reason }) {
+  recordExchange(id, { caseId, replacementOrderId = null, reason, merchantReceipt }) {
     const session = this.requireSession(id);
     const existing = session.afterSales?.find((entry) => entry.caseId === caseId);
     if (existing) {
@@ -567,6 +583,18 @@ export class TransactionService {
       error.code = "ORDER_ALREADY_EXCHANGED";
       throw error;
     }
+    if (merchantReceipt?.status !== "succeeded"
+      || merchantReceipt.operation !== "create_replacement"
+      || merchantReceipt.orderId !== session.order.id
+      || merchantReceipt.caseId !== caseId
+      || merchantReceipt.replacementOrderId !== replacementOrderId
+      || merchantReceipt.idempotencyKey !== `exchange-${caseId}`
+      || !merchantReceipt.providerId) {
+      const error = new Error("Merchant replacement receipt does not match the order and service case");
+      error.statusCode = 502;
+      error.code = "INVALID_MERCHANT_REPLACEMENT_RECEIPT";
+      throw error;
+    }
 
     const completedAt = this.now();
     const exchange = {
@@ -574,16 +602,18 @@ export class TransactionService {
       type: "exchange",
       caseId,
       status: "replacement_created_sandbox",
-      replacementOrderId: replacementOrderId ?? `order_replacement_demo_${randomUUID().slice(0, 8)}`,
+      replacementOrderId,
       reason,
       completedAt,
-      disclaimer: "Simulated exchange. No item will be shipped.",
+      merchantReceipt: clone(merchantReceipt),
+      disclaimer: merchantReceipt.disclaimer,
     };
     appendAudit(session, "exchange_replacement_created", {
       caseId,
       exchangeId: exchange.id,
       replacementOrderId: exchange.replacementOrderId,
       idempotencyKey: `exchange-${caseId}`,
+      providerId: merchantReceipt.providerId,
     }, completedAt);
     session.order = {
       ...session.order,

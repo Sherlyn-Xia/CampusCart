@@ -43,15 +43,15 @@ export async function handleOperatorApi({ request, response, url, service, authe
     return true;
   }
   if (request.method === "POST" && parts[6] === "review") {
-    sendJson(response, 200, service.review(caseId, ReviewSchema.parse(await bodyOf(request)), operator));
+    sendJson(response, 200, await service.review(caseId, ReviewSchema.parse(await bodyOf(request)), operator));
     return true;
   }
   if (request.method === "POST" && parts[6] === "receive-return") {
-    sendJson(response, 200, service.receiveReturn(caseId, ReceiveReturnSchema.parse(await bodyOf(request)), operator));
+    sendJson(response, 200, await service.receiveReturn(caseId, ReceiveReturnSchema.parse(await bodyOf(request)), operator));
     return true;
   }
   if (request.method === "POST" && parts[6] === "complete-exchange") {
-    sendJson(response, 200, service.completeExchange(caseId, CompleteExchangeSchema.parse(await bodyOf(request)), operator));
+    sendJson(response, 200, await service.completeExchange(caseId, CompleteExchangeSchema.parse(await bodyOf(request)), operator));
     return true;
   }
   return false;

@@ -100,6 +100,7 @@ export function createCampusCartServer({
   agentRuntime = null,
   persistence = null,
   operatorAuthenticator = null,
+  afterSalesAdapters = null,
 } = {}) {
   const transactionService = service ?? new TransactionService({ repository: persistence?.transactions });
   const knowledgeBase = persistence ? new KnowledgeBase({
@@ -111,6 +112,8 @@ export function createCampusCartServer({
     transactionService,
     repository: persistence?.afterSales,
     knowledgeBase,
+    paymentRefundAdapter: afterSalesAdapters?.paymentRefund,
+    merchantAfterSalesAdapter: afterSalesAdapters?.merchantAfterSales,
   });
   const operatorAuth = operatorAuthenticator ?? createOperatorAuthenticator();
   const runtime = agentRuntime ?? new AgentRuntime({

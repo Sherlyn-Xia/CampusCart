@@ -23,9 +23,11 @@ flowchart LR
   TX --> DONE[Completed outcome]
   DONE --> AS[After-sales State Machine]
   OP[Authenticated Operator API] --> AS
+  AS --> MSA[Merchant After-sales Adapter]
+  AS --> PRA[Payment Refund Adapter]
   AS --> REF[Refunded outcome]
   LG --> RM[(Structured Reflection Memory)]
-  LG & TX & PA & AS & KB & RM --> DB[(SQLite Persistence)]
+  LG & TX & PA & AS & MSA & PRA & KB & RM --> DB[(SQLite Persistence)]
   LG & LC & CAT & MQ & ID & RE & PM & PA --> AT[(Agent Trace Hash Chain)]
   TX & BL & STOP & DONE --> TT[(Transaction Audit Hash Chain)]
 ```
@@ -110,7 +112,9 @@ REQUESTED → ELIGIBILITY_CHECKED
   └─ outside policy window → REJECTED
 ```
 
-退款确认使用独立、一次性、会过期的 action。人工审核通过独立 `/api/v1/operator/*` 路由执行；未配置 `CAMPUSCART_OPERATOR_API_KEY` 时路由关闭并返回 503，错误密钥返回 401。Bearer token 使用固定长度 SHA-256 digest 做常量时间比较。后台写操作需要幂等键和合法前置状态，审核者 ID、角色和结果写入 service-case hash chain。沙箱退款会更新 payment/order 状态、恢复积分证据，并追加 transaction audit 与 service-case audit；模型没有退款或 operator 工具。
+退款确认使用独立、一次性、会过期的 action。人工审核通过独立 `/api/v1/operator/*` 路由执行；未配置 `CAMPUSCART_OPERATOR_API_KEY` 时路由关闭并返回 503，错误密钥返回 401。Bearer token 使用固定长度 SHA-256 digest 做常量时间比较。后台写操作需要幂等键和合法前置状态，审核者 ID、角色和结果写入 service-case hash chain。同一 case 的异步写操作在进程内串行化，避免并发审核重复调用 provider。
+
+`PaymentRefundAdapter` 与 `MerchantAfterSalesAdapter` 是独立于购物 Agent 的可注入 async 边界。默认 sandbox 实现分别生成确定性的退款、RMA、收货和 replacement 回执；服务会校验 provider、order、case、金额与 idempotency key，再允许交易核心改变 payment/order。回执写入 case outcome、transaction afterSales 证据和 hash-chain audit。adapter 抛错或回执不匹配时，case 转入 `MANUAL_REVIEW`，已支付交易保持不变。模型没有这些 adapter、退款或 operator 工具。
 
 ## 支付顺序与 TOCTOU 防护
 
@@ -151,7 +155,7 @@ Agent 创建的 session 带 `channel=agent` 和 `ownerRunId`。公开旧 `/api/s
 
 ## 可替换接口与当前限制
 
-`AdapterRegistry` 可以注入 merchant、identity、payment 实现。Merchant registry 已支持多个 adapter 并行查询；payment catalog 能描述 redirect、QR、deep link 和 SDK token。但当前确定性核心仍使用固定的、版本化 seed purchase paths。外部报价目前只用于 Agent 观察与展示，未直接成为可执行路径。
+购物侧 `AdapterRegistry` 可以注入 merchant、identity、payment 实现；售后侧可以分别注入 payment-refund 与 merchant-after-sales 实现。Merchant registry 已支持多个 adapter 并行查询；payment catalog 能描述 redirect、QR、deep link 和 SDK token。但当前确定性核心仍使用固定的、版本化 seed purchase paths。外部报价目前只用于 Agent 观察与展示，未直接成为可执行路径。
 
 这是有意的信任边界，不是完整商户集成。下一阶段应新增受信 ingestion：验证 adapter 身份、报价签名/版本/有效期，标准化商品和 Offer Card，再注册成交易核心可以锁定的 immutable quote。不要直接把任意 HTTP 响应当成付款依据。
 
@@ -174,4 +178,4 @@ hash[n] = SHA256(hash[n-1] + serialized(event[n] without hash))
 
 当前适合现场演示：固定 SKU、SQLite 持久化、来源化本地知识、结构化反思记忆、静态规则和 sandbox 支付/退款。
 
-真实部署前至少需要：托管数据库与租户隔离、密钥管理、OAuth/API 签名、payment/refund webhook 验签、幂等/重试、超时补偿、报价可信导入、商户售后适配器、身份 provider 同意与数据保留策略、可观测性和外部审计锚点。
+真实部署前至少需要：托管数据库与租户隔离、密钥管理、OAuth/API 签名、payment/refund webhook 验签、持久化任务队列与跨实例并发控制、结果未知时的对账与补偿、报价可信导入、真实商户售后 provider、身份 provider 同意与数据保留策略、可观测性和外部审计锚点。

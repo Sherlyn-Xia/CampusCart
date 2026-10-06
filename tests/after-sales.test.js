@@ -12,7 +12,7 @@ import { TransactionService } from "../src/domain/transaction-service.js";
 import { KnowledgeBase } from "../src/knowledge/knowledge-base.js";
 import { openSqlitePersistence } from "../src/persistence/sqlite.js";
 
-function openEnvironment(databasePath) {
+function openEnvironment(databasePath, { paymentRefundAdapter = null, merchantAfterSalesAdapter = null } = {}) {
   const persistence = openSqlitePersistence({ databasePath });
   const transactionService = new TransactionService({ repository: persistence.transactions });
   const runtime = new AgentRuntime({
@@ -28,6 +28,8 @@ function openEnvironment(databasePath) {
     transactionService,
     repository: persistence.afterSales,
     knowledgeBase: new KnowledgeBase({ repository: persistence.knowledge }),
+    paymentRefundAdapter,
+    merchantAfterSalesAdapter,
   });
   return { afterSales, persistence, runtime };
 }
@@ -90,13 +92,15 @@ test("after-sales refund requires confirmation, survives restart and reverses th
   environment = openEnvironment(databasePath);
   const restored = environment.afterSales.requireCase(serviceCase.id);
   assert.equal(restored.pendingAction.actionId, pendingAction.actionId);
-  const refunded = environment.afterSales.resume(serviceCase.id, {
+  const refunded = await environment.afterSales.resume(serviceCase.id, {
     actionId: pendingAction.actionId,
     decision: "approve",
   });
   assert.equal(refunded.status, "REFUNDED");
   assert.equal(refunded.auditChainValid, true);
   assert.equal(refunded.outcome.refund.amountCents > 0, true);
+  assert.equal(refunded.outcome.refund.providerReceipt.providerId, "campuscart-sandbox-refunds");
+  assert.equal(refunded.outcome.refund.providerReceipt.status, "succeeded");
 
   const transaction = environment.runtime.getTransaction(run.id);
   assert.equal(transaction.state, "REFUNDED");
@@ -104,9 +108,50 @@ test("after-sales refund requires confirmation, survives restart and reverses th
   assert.equal(transaction.order.status, "cancelled_refunded");
   assert.equal(transaction.auditChainValid, true);
   assert.equal(transaction.afterSales[0].caseId, serviceCase.id);
-  assert.throws(() => environment.afterSales.resume(serviceCase.id, {
+  await assert.rejects(environment.afterSales.resume(serviceCase.id, {
     actionId: pendingAction.actionId,
     decision: "approve",
   }), (error) => error.code === "AFTER_SALES_ACTION_NOT_CURRENT");
+  environment.persistence.close();
+});
+
+test("refund adapter failure preserves the paid transaction and routes the case to manual review", async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), "campuscart-refund-adapter-failure-"));
+  const databasePath = join(directory, "campuscart.sqlite");
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  let calls = 0;
+  const paymentRefundAdapter = {
+    capabilities: () => ({ providerId: "failing-refund-provider", mode: "test", supports: ["refund"] }),
+    async refund() {
+      calls += 1;
+      throw Object.assign(new Error("Provider timeout before a confirmed refund"), { code: "REFUND_PROVIDER_TIMEOUT" });
+    },
+  };
+  const environment = openEnvironment(databasePath, { paymentRefundAdapter });
+  const run = await completePurchase(environment.runtime);
+  const before = environment.runtime.getTransaction(run.id);
+  const serviceCase = environment.afterSales.createCase({
+    runId: run.id,
+    requestedAction: "refund",
+    reason: "Test a failed provider boundary",
+    idempotencyKey: "refund-provider-failure-1",
+  });
+
+  const result = await environment.afterSales.resume(serviceCase.id, {
+    actionId: serviceCase.pendingAction.actionId,
+    decision: "approve",
+  });
+  const after = environment.runtime.getTransaction(run.id);
+
+  assert.equal(calls, 1);
+  assert.equal(result.status, "MANUAL_REVIEW");
+  assert.equal(result.outcome.reason.code, "REFUND_PROVIDER_TIMEOUT");
+  assert.equal(result.audit.some((event) => event.type === "after_sales_provider_failed"), true);
+  assert.equal(result.auditChainValid, true);
+  assert.equal(after.state, "COMPLETED");
+  assert.equal(after.payment.status, before.payment.status);
+  assert.equal(after.order.status, before.order.status);
+  assert.deepEqual(after.afterSales ?? [], before.afterSales ?? []);
+  assert.equal(JSON.stringify(environment.runtime.capabilities()).includes("failing-refund-provider"), false);
   environment.persistence.close();
 });

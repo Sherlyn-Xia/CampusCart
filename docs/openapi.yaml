@@ -1,10 +1,11 @@
 openapi: 3.1.0
 info:
   title: CampusCart Agent API
-  version: 1.3.0
+  version: 1.4.0
   description: >-
     Frontend-independent contract for the Hackathon sandbox. All bundled merchant,
-    identity and payment adapters use synthetic data. No real funds move.
+    identity, payment, refund and merchant after-sales adapters use synthetic data.
+    Provider receipts are persisted as evidence. No real funds move or items ship.
 servers:
   - url: http://localhost:3000
 paths:
@@ -173,7 +174,7 @@ paths:
                 type: string
   /api/v1/after-sales/capabilities:
     get:
-      summary: Inspect available sandbox after-sales actions and safety boundaries
+      summary: Inspect available sandbox after-sales actions, provider adapters and safety boundaries
       responses:
         "200":
           description: After-sales capabilities
@@ -263,7 +264,7 @@ paths:
               $ref: "#/components/schemas/ResumeAfterSalesCase"
       responses:
         "200":
-          description: Updated case and simulated refund result
+          description: Updated case with validated provider receipt, or MANUAL_REVIEW if the provider fails
         "409":
           description: Stale or already-used action
         "410":
@@ -325,7 +326,7 @@ paths:
               $ref: "#/components/schemas/OperatorReview"
       responses:
         "200":
-          description: RETURN_AUTHORIZED, EXCHANGE_AUTHORIZED, or REVIEW_REJECTED case
+          description: Authorized/rejected case with merchant receipt evidence, or MANUAL_REVIEW on provider failure
         "401":
           description: Missing or invalid operator Bearer token
         "409":
@@ -347,7 +348,7 @@ paths:
               $ref: "#/components/schemas/OperatorIdempotentAction"
       responses:
         "200":
-          description: REFUNDED case with transaction and audit evidence
+          description: REFUNDED case with merchant/refund receipts, or MANUAL_REVIEW on provider failure
         "401":
           description: Missing or invalid operator Bearer token
         "409":
@@ -369,7 +370,7 @@ paths:
               $ref: "#/components/schemas/CompleteExchange"
       responses:
         "200":
-          description: COMPLETED exchange case and replacement-order evidence
+          description: COMPLETED exchange with merchant receipt evidence, or MANUAL_REVIEW on provider failure
         "401":
           description: Missing or invalid operator Bearer token
         "409":
