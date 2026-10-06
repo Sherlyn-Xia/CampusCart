@@ -54,5 +54,9 @@ export async function handleOperatorApi({ request, response, url, service, authe
     sendJson(response, 200, await service.completeExchange(caseId, CompleteExchangeSchema.parse(await bodyOf(request)), operator));
     return true;
   }
+  if (request.method === "POST" && parts[6] === "retry-refund") {
+    sendJson(response, 200, await service.retryRefund(caseId, ReceiveReturnSchema.parse(await bodyOf(request)), operator));
+    return true;
+  }
   return false;
 }

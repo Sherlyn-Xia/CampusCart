@@ -128,6 +128,8 @@ Open <http://127.0.0.1:3000>. If port 3000 is busy, use another one:
 PORT=3100 npm start
 ```
 
+To use the separate after-sales operator console, set a long random `CAMPUSCART_OPERATOR_API_KEY` in `.env`, restart, then open <http://127.0.0.1:3000/operator>. The console supports case filtering, return/exchange review, return receipt, replacement creation, refund reconciliation and audit/provider evidence. The key is kept only in the current tab's JavaScript memory—never in `localStorage`, `sessionStorage`, the URL or the shopping Agent. The bundled console is suitable for the local sandbox; production should replace the shared key with individual identity, RBAC and short-lived sessions.
+
 With no configuration the agent runs in `langgraph_deterministic_fallback` mode. To use a real LLM, copy `.env.example` to `.env`, add your own key and restart (see [Environment variables](#6-environment-variables)).
 
 Agent runs, LangGraph checkpoints, transactions, payment sessions, knowledge documents, reflection memories and after-sales cases persist in `data/campuscart.sqlite` by default. Pending confirmations can resume after a server restart.
@@ -201,7 +203,7 @@ If the model call fails (wrong key, region block, timeout) the run records a `mo
 
 **RAG and reflection are advisory.** Knowledge retrieval returns source identifiers. It uses local FTS5 by default and adds persistent vector ranking only when a separate embedding model is explicitly configured. Reflection episodes have a verified/rejected quality gate, usage counters and feedback records; they may improve clarification, tool routing and explanations, but are explicitly prohibited from changing prices, budgets, eligibility, authorization scope or payment execution.
 
-**After-sales is separately authorized.** Natural-language requests can enter through `POST /api/v1/after-sales/requests`. `cancel_order` and `refund` create a one-time user confirmation before the sandbox refund changes the order. `return` and `exchange` enter `MANUAL_REVIEW`. They can advance only through the isolated `/api/v1/operator/*` routes, protected by `CAMPUSCART_OPERATOR_API_KEY`; the key and operator tools are never exposed to the shopping Agent. Operator mutations require idempotency keys, enforce state preconditions, and record reviewer identity in the service-case audit. Returns refund only after receipt; exchanges create a sandbox replacement record without refunding the original payment. Payment refunds and merchant return/exchange operations now run through injectable async adapters. Their source-attributed receipts are validated, persisted and included in both case and transaction evidence; provider failure leaves the paid transaction unchanged and routes the case to manual review. The bundled adapters remain deterministic sandboxes. See `GET /api/v1/after-sales/capabilities` and the OpenAPI contract.
+**After-sales is separately authorized.** Natural-language requests can enter through `POST /api/v1/after-sales/requests`. `cancel_order` and `refund` create a one-time user confirmation before the sandbox refund changes the order. `return` and `exchange` enter `MANUAL_REVIEW`. They can advance only through the isolated `/api/v1/operator/*` routes, protected by `CAMPUSCART_OPERATOR_API_KEY`; the key and operator tools are never exposed to the shopping Agent. Operator mutations require idempotency keys, enforce state preconditions, and record reviewer identity in the service-case audit. Returns refund only after receipt; exchanges create a sandbox replacement record without refunding the original payment. Payment refunds and merchant return/exchange operations run through injectable async adapters. Their source-attributed receipts are validated, persisted and included in both case and transaction evidence; provider failure leaves the paid transaction unchanged and routes the case to manual review. An operator may retry only a case whose latest provider failure is a refund, preserving the provider idempotency key. The bundled adapters remain deterministic sandboxes. See the `/operator` console, `GET /api/v1/after-sales/capabilities` and the OpenAPI contract.
 
 **Other hygiene.** The legacy transaction API is retired (HTTP 410) so there is no side door around human authorization. Request bodies are size-limited and malformed JSON returns 400. The front end HTML-escapes backend-supplied strings. `.env` is git-ignored and no key is stored in the repository.
 
@@ -223,7 +225,7 @@ If the model call fails (wrong key, region block, timeout) the run records a `mo
 - Move the local SQLite persistence layer to a managed transactional database and add authentication/tenant isolation
 - Real payment provider integration with redirect or SDK token, verified webhooks, idempotency, pre-authorization and capture, and reconciliation
 - Authentication and consent for real student verification, plus data-retention policy
-- Replace the shared sandbox operator key with per-user OIDC/RBAC, key rotation and a production review console
+- Replace the shared sandbox operator key with per-user OIDC/RBAC, key rotation and short-lived authenticated console sessions
 - Quantity and multi-item support once per-unit offer rules are defined (for example whether the student discount applies per unit)
 - Observability, external timestamping for the audit chains, and a legal and privacy review before any real launch
 
@@ -231,6 +233,7 @@ If the model call fails (wrong key, region block, timeout) the run records a `mo
 
 ```text
 public/            front end (api.js is the only file that calls the backend)
+public/operator.*   isolated after-sales operator console (calls only /api/v1/operator/*)
 src/server.js      HTTP server and static files
 src/agent/         API handlers, LangGraph runtime, LangChain coordinator and tools, mock adapters
 src/after-sales/   post-purchase service-case state machine and API

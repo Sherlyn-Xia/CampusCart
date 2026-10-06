@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#182320">
+  <meta name="description" content="CampusCart operator console for sandbox after-sales review.">
+  <title>CampusCart · After-sales Operations</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='15' fill='%23182320'/%3E%3Cpath d='M14 17h20M14 24h20M14 31h13' stroke='%2378ddb8' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="operator.css">
+  <script src="operator.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to case workspace</a>
+  <header class="topbar">
+    <a class="brand" href="/operator" aria-label="CampusCart operations home">
+      <span class="brand-mark">c</span>
+      <span>campuscart</span><strong>operations</strong>
+    </a>
+    <div class="operator-session" id="operator-session" hidden>
+      <span class="live-dot" aria-hidden="true"></span>
+      <span id="operator-name"></span>
+      <button class="quiet-button" id="disconnect" type="button">Lock console</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="login-shell" id="login-view" aria-labelledby="login-title">
+      <div class="login-copy">
+        <p class="eyebrow">SECURE OPERATIONS WORKSPACE</p>
+        <h1 id="login-title">Resolve after-sales cases with a complete evidence trail.</h1>
+        <p>Review returns and exchanges, record received items, create sandbox replacements, and reconcile failed refunds.</p>
+        <div class="boundary-note">
+          <strong>Separated from the shopping Agent</strong>
+          <span>The Operator API key is held only in this tab's memory. It is never saved to browser storage or exposed to the Agent.</span>
+        </div>
+      </div>
+      <form class="login-card" id="login-form">
+        <span class="lock-icon" aria-hidden="true">↗</span>
+        <h2>Operator access</h2>
+        <p>Enter the server-side key configured as <code>CAMPUSCART_OPERATOR_API_KEY</code>.</p>
+        <label for="operator-key">Operator API key</label>
+        <input id="operator-key" name="campuscart-operator-key" type="password" minlength="16" autocomplete="off" spellcheck="false" required>
+        <button class="primary-button" type="submit">Open case workspace</button>
+        <p class="form-error" id="login-error" role="alert" hidden></p>
+      </form>
+    </section>
+
+    <section class="workspace" id="workspace" hidden aria-label="After-sales case workspace">
+      <div class="workspace-head">
+        <div>
+          <p class="eyebrow">AFTER-SALES CONTROL</p>
+          <h1>Case workspace</h1>
+          <p class="subtle">Every mutation requires a state precondition and an idempotency key.</p>
+        </div>
+        <button class="outline-button" id="refresh" type="button">Refresh cases</button>
+      </div>
+
+      <div class="stats" aria-label="Case summary">
+        <article><span>Visible cases</span><strong id="stat-total">0</strong></article>
+        <article><span>Needs attention</span><strong id="stat-review">0</strong></article>
+        <article><span>In progress</span><strong id="stat-progress">0</strong></article>
+        <article><span>Resolved</span><strong id="stat-resolved">0</strong></article>
+      </div>
+
+      <div class="toolbar">
+        <label for="status-filter">Status</label>
+        <select id="status-filter">
+          <option value="">All statuses</option>
+          <option value="MANUAL_REVIEW">Manual review</option>
+          <option value="RETURN_AUTHORIZED">Return authorized</option>
+          <option value="RETURN_RECEIVED">Return received</option>
+          <option value="EXCHANGE_AUTHORIZED">Exchange authorized</option>
+          <option value="REFUNDED">Refunded</option>
+          <option value="COMPLETED">Completed</option>
+          <option value="REVIEW_REJECTED">Review rejected</option>
+        </select>
+        <span id="last-updated" class="last-updated"></span>
+      </div>
+
+      <p class="workspace-error" id="workspace-error" role="alert" hidden></p>
+      <div class="case-layout">
+        <section class="case-list-panel" aria-labelledby="case-list-title">
+          <div class="panel-title"><h2 id="case-list-title">Cases</h2><span id="case-count">0</span></div>
+          <div class="case-list" id="case-list"></div>
+        </section>
+        <section class="case-detail" id="case-detail" aria-live="polite">
+          <div class="empty-state">
+            <span>◎</span>
+            <h2>Select a case</h2>
+            <p>Choose a case to inspect its evidence and available actions.</p>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

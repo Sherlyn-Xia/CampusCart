@@ -148,6 +148,7 @@ export function createCampusCartServer({
         operatorAuthenticator: operatorAuth,
       });
       if (url.pathname.startsWith("/sandbox/payment-auth/")) return await staticFile(response, "/payment-auth.html");
+      if (url.pathname === "/operator") return await staticFile(response, "/operator.html");
       return await staticFile(response, url.pathname);
     } catch (error) {
       const formatted = agentApiError(error);

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: CampusCart Agent API
-  version: 1.4.0
+  version: 1.5.0
   description: >-
     Frontend-independent contract for the Hackathon sandbox. All bundled merchant,
     identity, payment, refund and merchant after-sales adapters use synthetic data.
@@ -375,6 +375,31 @@ paths:
           description: Missing or invalid operator Bearer token
         "409":
           description: State precondition failed or idempotency conflict
+        "503":
+          description: Operator authentication is not configured
+  /api/v1/operator/after-sales/cases/{caseId}/retry-refund:
+    parameters:
+      - $ref: "#/components/parameters/CaseId"
+    post:
+      summary: Retry a refund after operator reconciliation of a provider failure
+      description: >-
+        Valid only when the case is in MANUAL_REVIEW and its latest provider failure
+        is a refund. The provider call reuses refund-{caseId} as its idempotency key.
+      security:
+        - OperatorBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperatorIdempotentAction"
+      responses:
+        "200":
+          description: REFUNDED case with provider evidence, or MANUAL_REVIEW if the retry still fails
+        "401":
+          description: Missing or invalid operator Bearer token
+        "409":
+          description: Case is not awaiting refund reconciliation or idempotency conflict
         "503":
           description: Operator authentication is not configured
 components:

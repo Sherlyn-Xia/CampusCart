@@ -129,6 +129,39 @@ test("operator API authenticates before listing or mutating cases", async () => 
   assert.equal(response.body.cases[0].status, "MANUAL_REVIEW");
 });
 
+test("operator API exposes authenticated refund reconciliation with validated idempotency", async () => {
+  const response = {};
+  const authenticator = createOperatorAuthenticator({
+    apiKey: "test-operator-key-that-is-long-enough",
+    operatorId: operator.id,
+  });
+  let received = null;
+  const service = {
+    async retryRefund(caseId, input, principal) {
+      received = { caseId, input, principal };
+      return { id: caseId, status: "REFUNDED" };
+    },
+  };
+  const handled = await handleOperatorApi({
+    request: { method: "POST", headers: { authorization: "Bearer test-operator-key-that-is-long-enough" } },
+    response,
+    url: new URL("http://localhost/api/v1/operator/after-sales/cases/case-7/retry-refund"),
+    service,
+    authenticator,
+    sendJson: (target, statusCode, body) => Object.assign(target, { statusCode, body }),
+    bodyOf: async () => ({ note: "Provider reconciliation complete", idempotencyKey: "retry-refund-7" }),
+  });
+
+  assert.equal(handled, true);
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.body.status, "REFUNDED");
+  assert.deepEqual(received, {
+    caseId: "case-7",
+    input: { note: "Provider reconciliation complete", idempotencyKey: "retry-refund-7" },
+    principal: operator,
+  });
+});
+
 test("approved return survives restart, refunds once, and rejects concurrent state changes", async (context) => {
   const directory = await mkdtemp(join(tmpdir(), "campuscart-operator-return-"));
   const databasePath = join(directory, "campuscart.sqlite");

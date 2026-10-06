@@ -623,6 +623,31 @@ export class AfterSalesService {
     });
   }
 
+  async retryRefund(id, { note = null, idempotencyKey }, operator) {
+    return this.runOperatorOperation(id, {
+      type: "retry_refund",
+      idempotencyKey,
+      payload: { note },
+      operator,
+      execute: async (serviceCase) => {
+        const lastProviderFailure = [...serviceCase.audit]
+          .reverse()
+          .find((event) => event.type === "after_sales_provider_failed");
+        if (serviceCase.status !== "MANUAL_REVIEW" || lastProviderFailure?.data?.operation !== "refund") {
+          throw serviceError("This case is not awaiting refund reconciliation", 409, "AFTER_SALES_STATE_CONFLICT");
+        }
+        if (!["cancel_order", "refund", "return"].includes(serviceCase.requestedAction)) {
+          throw serviceError("This case type cannot issue a refund", 409, "AFTER_SALES_ACTION_NOT_REFUNDABLE");
+        }
+        appendCaseAudit(serviceCase, "refund_retry_requested", {
+          note,
+          operator: clone(operator),
+        }, this.now());
+        await this.processRefund(serviceCase, serviceCase.requestedAction);
+      },
+    });
+  }
+
   async resume(id, { actionId, decision }) {
     return this.runCaseMutation(id, async () => {
       const serviceCase = this.requireCase(id);

@@ -12,6 +12,8 @@ import { TransactionService } from "../src/domain/transaction-service.js";
 import { KnowledgeBase } from "../src/knowledge/knowledge-base.js";
 import { openSqlitePersistence } from "../src/persistence/sqlite.js";
 
+const operator = Object.freeze({ id: "refund-reviewer", role: "after_sales_operator" });
+
 function openEnvironment(databasePath, { paymentRefundAdapter = null, merchantAfterSalesAdapter = null } = {}) {
   const persistence = openSqlitePersistence({ databasePath });
   const transactionService = new TransactionService({ repository: persistence.transactions });
@@ -115,16 +117,29 @@ test("after-sales refund requires confirmation, survives restart and reverses th
   environment.persistence.close();
 });
 
-test("refund adapter failure preserves the paid transaction and routes the case to manual review", async (context) => {
+test("refund adapter failure preserves the paid transaction and an operator can safely retry it", async (context) => {
   const directory = await mkdtemp(join(tmpdir(), "campuscart-refund-adapter-failure-"));
   const databasePath = join(directory, "campuscart.sqlite");
   context.after(() => rm(directory, { recursive: true, force: true }));
   let calls = 0;
   const paymentRefundAdapter = {
     capabilities: () => ({ providerId: "failing-refund-provider", mode: "test", supports: ["refund"] }),
-    async refund() {
+    async refund(input) {
       calls += 1;
-      throw Object.assign(new Error("Provider timeout before a confirmed refund"), { code: "REFUND_PROVIDER_TIMEOUT" });
+      if (calls === 1) {
+        throw Object.assign(new Error("Provider timeout before a confirmed refund"), { code: "REFUND_PROVIDER_TIMEOUT" });
+      }
+      return {
+        providerId: "flaky-refund-provider",
+        providerRefundId: `refund-retry-${input.caseId}`,
+        paymentId: input.paymentId,
+        status: "succeeded",
+        amountCents: input.amountCents,
+        currency: input.currency,
+        idempotencyKey: input.idempotencyKey,
+        processedAt: new Date().toISOString(),
+        disclaimer: "Test receipt",
+      };
     },
   };
   const environment = openEnvironment(databasePath, { paymentRefundAdapter });
@@ -153,5 +168,16 @@ test("refund adapter failure preserves the paid transaction and routes the case 
   assert.equal(after.order.status, before.order.status);
   assert.deepEqual(after.afterSales ?? [], before.afterSales ?? []);
   assert.equal(JSON.stringify(environment.runtime.capabilities()).includes("failing-refund-provider"), false);
+
+  const retryInput = { note: "Provider reports no prior refund; retry approved", idempotencyKey: "retry-refund-provider-1" };
+  const retried = await environment.afterSales.retryRefund(serviceCase.id, retryInput, operator);
+  const replayed = await environment.afterSales.retryRefund(serviceCase.id, retryInput, operator);
+  const refundedTransaction = environment.runtime.getTransaction(run.id);
+  assert.equal(calls, 2);
+  assert.equal(retried.status, "REFUNDED");
+  assert.equal(replayed.status, "REFUNDED");
+  assert.equal(retried.outcome.refund.providerReceipt.providerId, "flaky-refund-provider");
+  assert.equal(refundedTransaction.state, "REFUNDED");
+  assert.equal(refundedTransaction.afterSales.length, 1);
   environment.persistence.close();
 });

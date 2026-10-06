@@ -103,6 +103,7 @@ SQLite 保存来源化知识文档、chunk 与可选 embedding。默认使用 FT
 ```text
 REQUESTED → ELIGIBILITY_CHECKED
   ├─ refund / cancel_order → USER_CONFIRMATION_REQUIRED → REFUND_PENDING → REFUNDED
+  │                                                ↘ provider failure → MANUAL_REVIEW → operator retry
   ├─ return → MANUAL_REVIEW
   │            ├─ reject → REVIEW_REJECTED
   │            └─ approve → RETURN_AUTHORIZED → RETURN_RECEIVED → REFUNDED
@@ -114,7 +115,9 @@ REQUESTED → ELIGIBILITY_CHECKED
 
 退款确认使用独立、一次性、会过期的 action。人工审核通过独立 `/api/v1/operator/*` 路由执行；未配置 `CAMPUSCART_OPERATOR_API_KEY` 时路由关闭并返回 503，错误密钥返回 401。Bearer token 使用固定长度 SHA-256 digest 做常量时间比较。后台写操作需要幂等键和合法前置状态，审核者 ID、角色和结果写入 service-case hash chain。同一 case 的异步写操作在进程内串行化，避免并发审核重复调用 provider。
 
-`PaymentRefundAdapter` 与 `MerchantAfterSalesAdapter` 是独立于购物 Agent 的可注入 async 边界。默认 sandbox 实现分别生成确定性的退款、RMA、收货和 replacement 回执；服务会校验 provider、order、case、金额与 idempotency key，再允许交易核心改变 payment/order。回执写入 case outcome、transaction afterSales 证据和 hash-chain audit。adapter 抛错或回执不匹配时，case 转入 `MANUAL_REVIEW`，已支付交易保持不变。模型没有这些 adapter、退款或 operator 工具。
+`PaymentRefundAdapter` 与 `MerchantAfterSalesAdapter` 是独立于购物 Agent 的可注入 async 边界。默认 sandbox 实现分别生成确定性的退款、RMA、收货和 replacement 回执；服务会校验 provider、order、case、金额与 idempotency key，再允许交易核心改变 payment/order。回执写入 case outcome、transaction afterSales 证据和 hash-chain audit。adapter 抛错或回执不匹配时，case 转入 `MANUAL_REVIEW`，已支付交易保持不变。只有最新 provider failure 为 `refund` 的 case 才能通过 operator API 重试，且继续使用 `refund-{caseId}` provider 幂等键。模型没有这些 adapter、退款或 operator 工具。
+
+`/operator` 是独立的静态管理界面，只调用 `/api/v1/operator/*`。共享 Bearer key 只保存在页面内存，不写入 URL、localStorage 或 sessionStorage；锁定页面或关闭 tab 会清除引用。这降低了本地演示时的误泄漏，但不能替代生产级 OIDC、RBAC、CSRF 策略和短期 session。
 
 ## 支付顺序与 TOCTOU 防护
 
